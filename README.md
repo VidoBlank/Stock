@@ -1,6 +1,6 @@
-# AI量化选股系统
+# 量化选股工具
 
-这是一个基于Tushare数据和DeepSeek API的智能量化选股系统，支持策略回测、实时选股和可视化界面。
+这是一个基于Tushare数据的量化选股工具，支持评分推荐、策略回测和可视化界面。
 
 ## 功能特点
 
@@ -13,16 +13,17 @@
 
 ## 系统要求
 
-- Python 3.8+
+- Python 3.13.2
 - Tushare Pro账户（需要积分获取数据权限）
-- DeepSeek API密钥（可选，用于智能策略分析）
+- DeepSeek API密钥（可选，用于智能策略分析，目前功能未完善）
 
 ## 快速开始
 
-### 1. 克隆项目
+### 1. 下载项目
 ```bash
-git clone https://github.com/yourusername/quant-stock-selection.git
-cd quant-stock-selection
+下载项目到指定文件夹，文件夹中的bat启动文件可以自己编辑，根据你的解压位置来改动。
+安装python
+注册并获取Tushare token
 ```
 
 ### 2. 安装依赖
@@ -71,7 +72,8 @@ quant-stock-selection/
 ├── appy.py                 # 主程序：选股系统
 ├── backtest_tool.py        # 回测工具
 ├── market_utils.py         # 市场工具函数
-├── fetch_a_shares_data.py  # 数据获取脚本
+├── fetch_a_shares_data.py  # 获取本地数据（暂无用）
+├── build_concept_mapping.py  # 获取行业概念板块数据
 ├── config.py              # 配置管理
 ├── requirements.txt       # 依赖包列表
 ├── .env.example          # 环境变量示例
@@ -93,7 +95,7 @@ quant-stock-selection/
 
 - 主板、创业板、科创板
 - 中证500、沪深300、上证50等指数成分股
-- 行业板块和概念板块
+
 
 ### 3. 风险控制
 
@@ -106,7 +108,8 @@ quant-stock-selection/
 
 1. Tushare数据有调用频率限制，请合理使用
 2. 某些数据接口需要足够的Tushare积分
-3. 股票投资有风险，本工具仅供参考，不构成投资建议
+3. 在config中可以调整接口的速率与线程，请根据具体的tushare积分权限调整防止接口超限
+4.. 股票投资有风险，本工具仅供参考，不构成投资建议
 
 ## 贡献指南
 
@@ -118,4 +121,4 @@ MIT License
 
 ## 联系方式
 
-如有问题或建议，请通过Issue联系。
+如有问题或建议，请通过997818815@qq.com联系
