@@ -1,0 +1,8 @@
+tushare
+pandas
+gradio
+requests
+matplotlib
+pyarrow
+fastparquet
+python-dotenv
