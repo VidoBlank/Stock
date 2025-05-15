@@ -13,7 +13,7 @@
 
 ## 系统要求
 
-- Python 3.15
+- Python 3.13.2
 - Tushare Pro账户（需要积分获取数据权限）
 - DeepSeek API密钥（可选，用于智能策略分析）
 
