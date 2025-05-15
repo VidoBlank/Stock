@@ -360,23 +360,67 @@ def evaluate_financials(ts_code: str) -> float:
 
 
 
-    
-# 【龙虎榜】机构席位数据缓存    
 def initialize_top_inst():
+    """初始化龙虎榜机构席位数据，获取最近几个交易日上榜的股票"""
     global top_inst_cache
     logger.info("🚨 初始化龙虎榜机构席位数据...")
-
+    
+    # 初始化缓存，确保是空集合
+    top_inst_cache = set()
+    
+    # 获取最近5个交易日的日期
+    today = datetime.today()
+    date_list = []
+    
+    # 获取最近10个自然日，通常包含5个交易日
+    for i in range(10):
+        check_date = today - timedelta(days=i)
+        # 排除周末
+        if check_date.weekday() < 5:  # 0-4 表示周一至周五
+            date_list.append(check_date.strftime('%Y%m%d'))
+        if len(date_list) >= 5:
+            break
+    
+    logger.info(f"查询最近交易日龙虎榜数据: {date_list}")
+    
+    # 查询每一天的龙虎榜数据
+    for trade_date in date_list:
+        try:
+            # 根据文档，top_inst 接口需要 trade_date 参数
+            df = safe_api_call(pro.top_inst, trade_date=trade_date)
+            
+            if df is not None and not df.empty and 'ts_code' in df.columns:
+                # 获取该日上榜的股票代码
+                day_stocks = set(df['ts_code'].unique())
+                top_inst_cache.update(day_stocks)  # 合并到总集合中
+                
+                logger.info(f"✅ {trade_date} 龙虎榜上榜 {len(day_stocks)} 支股票")
+                
+                # 如果该日有数据，可以提前退出循环（可选，如果想获取多日数据则注释此行）
+                # break
+            else:
+                logger.warning(f"⚠️ {trade_date} 龙虎榜数据为空或格式异常")
+                
+        except Exception as e:
+            logger.warning(f"获取 {trade_date} 龙虎榜数据失败: {str(e)}")
+    
+    # 查询结果统计
+    if top_inst_cache:
+        logger.info(f"✅ 机构席位数据缓存完成：共 {len(top_inst_cache)} 支上榜股票")
+        # 输出前5支上榜股票用于调试
+        sample_stocks = list(top_inst_cache)[:5] if len(top_inst_cache) > 5 else list(top_inst_cache)
+        logger.debug(f"上榜股票示例: {sample_stocks}")
+    else:
+        logger.warning("⚠️ 未找到任何机构席位数据，所有日期查询均为空")
+    
+    # 保存到文件（可选），方便调试和分析
     try:
-        df = safe_api_call(pro.top_inst, trade_date=datetime.today().strftime('%Y%m%d'))
-        if not df.empty:
-            top_inst_cache = set(df['ts_code'].unique())
-            logger.info(f"✅ 机构席位数据缓存完成：{len(top_inst_cache)} 支股票")
-        else:
-            top_inst_cache = set()   # 数据为空时，确保是空集合
-            logger.warning("⚠️ 机构席位数据为空")
+        cache_file = "top_inst_cache.json"
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(list(top_inst_cache), f, ensure_ascii=False, indent=2)
+        logger.debug(f"上榜股票清单已保存至 {cache_file}")
     except Exception as e:
-        top_inst_cache = set()       # 异常时也清空，防止残留旧数据
-        logger.warning(f"机构席位获取失败: {str(e)}")
+        logger.debug(f"保存上榜股票清单失败: {e}")
         
 # 【龙虎榜】命中机构席位加分
 def check_top_inst(ts_code: str) -> float:
@@ -859,44 +903,71 @@ def initialize_share_float_data(ts_codes: List[str], days_ahead: int = 30):
     logger.info(f"🚨 初始化限售解禁数据（未来 {days_ahead} 天）...")
     batch_size = 200
     today = datetime.today()
+    
+    # 计算时间范围
     end_date = (today + timedelta(days=days_ahead)).strftime('%Y%m%d')
     today_str = today.strftime('%Y%m%d')
-
+    
     # 预填充默认值
     for code in ts_codes:
         share_float_cache.setdefault(code, 0)
-
+    
+    # 记录成功获取数据的批次和有效解禁数量
+    success_batches = 0
+    total_batches = (len(ts_codes) + batch_size - 1) // batch_size
+    unlocked_count = 0
+    
     for i in range(0, len(ts_codes), batch_size):
         batch = ts_codes[i:i + batch_size]
         ts_str = ",".join(batch)
-
+        
         try:
-            # 获取今天公告的所有解禁计划
-            df = safe_api_call(pro.share_float, ts_code=ts_str, ann_date=today_str)
-
+            # 根据文档，我们可以直接使用start_date和end_date，不需要ann_date
+            # 直接查询未来days_ahead天内将要解禁的数据
+            df = safe_api_call(
+                pro.share_float,
+                ts_code=ts_str,
+                start_date=today_str,  # 从今天开始
+                end_date=end_date      # 到未来days_ahead天
+            )
+            
             if df.empty or 'ts_code' not in df.columns:
-                logger.warning(f"⚠️ share_float 批次 {i // batch_size + 1} 数据为空或字段缺失")
+                logger.warning(f"⚠️ share_float 批次 {i//batch_size + 1}/{total_batches} 数据为空或字段缺失")
                 continue
-
-            # 统计未来 N 天内将解禁的总股数
-            valid_codes = df['ts_code'].unique()
+            
+            # 统计未来days_ahead天内将解禁的总股数
+            success_batches += 1
+            valid_codes = set(df['ts_code'].unique())
+            
             for code in batch:
                 if code in valid_codes:
-                    sub_df = df[(df['ts_code'] == code) &
-                                (df['float_date'] >= today_str) &
+                    # 注意：这里我们要统计的是float_date在未来days_ahead天内的数据
+                    sub_df = df[(df['ts_code'] == code) & 
+                                (df['float_date'] >= today_str) & 
                                 (df['float_date'] <= end_date)]
-                    future_unlock = sub_df['float_share'].sum()
-                    share_float_cache[code] = future_unlock
-                    logger.info(f"✅ {code} 未来{days_ahead}天将解禁：{future_unlock:.1f} 万股")
+                    
+                    if not sub_df.empty and 'float_share' in sub_df.columns:
+                        # 确保float_share字段为数值类型
+                        sub_df['float_share'] = pd.to_numeric(sub_df['float_share'], errors='coerce')
+                        future_unlock = sub_df['float_share'].sum()
+                        
+                        if future_unlock > 0:
+                            share_float_cache[code] = future_unlock
+                            unlocked_count += 1
+                            logger.info(f"✅ {code} 未来{days_ahead}天将解禁：{future_unlock:.1f} 万股")
+                        else:
+                            share_float_cache[code] = 0
+                    else:
+                        share_float_cache[code] = 0
                 else:
                     share_float_cache[code] = 0
-
+            
         except Exception as e:
-            logger.error(f"❌ share_float 批次 {i // batch_size + 1} 处理失败：{str(e)}")
+            logger.error(f"❌ share_float 批次 {i//batch_size + 1}/{total_batches} 处理失败：{str(e)}")
             for code in batch:
                 share_float_cache[code] = 0
-
-    logger.info(f"✅ 限售解禁数据初始化完成 | 有效股票数：{len([v for v in share_float_cache.values() if v > 0])}")
+    
+    logger.info(f"✅ 限售解禁数据初始化完成 | 成功批次: {success_batches}/{total_batches} | 有解禁股票数：{unlocked_count}/{len(ts_codes)}")
 
 
 def evaluate_share_float(ts_code: str) -> float:
@@ -924,40 +995,83 @@ def evaluate_share_float(ts_code: str) -> float:
 
 
 def initialize_holdernumber_data(ts_codes: List[str]):
+    """初始化股东人数数据，计算最近两次公告之间的变化"""
     logger.info("🚨 初始化股东人数数据...")
     batch_size = 200
     today = datetime.today()
     one_year_ago = (today - timedelta(days=365)).strftime('%Y%m%d')
-
+    
+    # 跟踪处理进度与结果
+    total_batches = (len(ts_codes) + batch_size - 1) // batch_size
+    success_count = 0
     uncached_codes = [code for code in ts_codes if code not in holdernumber_cache]
-
+    
+    logger.info(f"待处理股票：{len(uncached_codes)}/{len(ts_codes)} 支")
+    
     for i in range(0, len(uncached_codes), batch_size):
         batch = uncached_codes[i:i + batch_size]
         ts_str = ",".join(batch)
-
+        
         try:
-            # 获取股东人数数据
-            df = safe_api_call(pro.stk_holdernumber, ts_code=ts_str, start_date=one_year_ago, end_date=today.strftime('%Y%m%d'))
-
-            if df.empty or 'ts_code' not in df.columns:
-                logger.warning(f"⚠️ 批次 {i // batch_size + 1} 股东人数数据为空或字段缺失")
+            # 根据文档，确认正确的API调用参数，使用start_date和end_date参数查询时间范围内的数据
+            df = safe_api_call(
+                pro.stk_holdernumber, 
+                ts_code=ts_str, 
+                start_date=one_year_ago, 
+                end_date=today.strftime('%Y%m%d')
+            )
+            
+            # 检查数据是否获取成功
+            if df.empty:
+                logger.warning(f"⚠️ 批次 {i//batch_size + 1}/{total_batches} 股东人数数据为空")
                 continue
-
-            # 计算股东人数变化
+                
+            if 'ts_code' not in df.columns or 'holder_num' not in df.columns or 'end_date' not in df.columns:
+                logger.warning(f"⚠️ 批次 {i//batch_size + 1}/{total_batches} 股东人数数据字段缺失 - 实际字段: {df.columns.tolist()}")
+                continue
+            
+            # 计算每支股票最近两次公告的股东人数变化
+            batch_success = 0
             for code in batch:
-                sub_df = df[df['ts_code'] == code].sort_values('end_date', ascending=False)
-                if len(sub_df) < 2:
+                try:
+                    # 筛选并按end_date排序（从新到旧）
+                    sub_df = df[df['ts_code'] == code].sort_values('end_date', ascending=False)
+                    
+                    if len(sub_df) < 2:
+                        # 数据不足，无法计算变化
+                        holdernumber_cache[code] = 0
+                        logger.debug(f"{code} 股东人数数据不足，至少需要2条记录，实际: {len(sub_df)}")
+                    else:
+                        # 计算最近两次的变化：前一期 - 最新期（正值表示减少，负值表示增加）
+                        latest_date = sub_df.iloc[0]['end_date']
+                        latest_num = int(sub_df.iloc[0]['holder_num'])
+                        prev_date = sub_df.iloc[1]['end_date']
+                        prev_num = int(sub_df.iloc[1]['holder_num'])
+                        
+                        change = prev_num - latest_num
+                        holdernumber_cache[code] = change
+                        
+                        # 记录显著变化
+                        if abs(change) > 100:
+                            logger.debug(f"{code} 股东人数变化: {prev_num}({prev_date}) → {latest_num}({latest_date}), 净变化: {change}")
+                        
+                        batch_success += 1
+                except Exception as e:
                     holdernumber_cache[code] = 0
-                else:
-                    latest, prev = sub_df.iloc[0]['holder_num'], sub_df.iloc[1]['holder_num']
-                    holdernumber_cache[code] = prev - latest
-
+                    logger.warning(f"{code} 处理失败: {str(e)}")
+            
+            logger.info(f"批次 {i//batch_size + 1}/{total_batches} 处理完成: {batch_success}/{len(batch)} 支股票处理成功")
+            success_count += batch_success
+            
         except Exception as e:
-            logger.error(f"股东人数数据处理失败（批次 {i // batch_size + 1}）: {str(e)}")
+            logger.error(f"股东人数数据处理失败（批次 {i//batch_size + 1}/{total_batches}）: {str(e)}")
+            logger.error(f"详细错误: {traceback.format_exc()}")
             for code in batch:
                 holdernumber_cache[code] = 0
-
-    logger.info(f"✅ 股东人数数据缓存完成：有效股票数 {len(holdernumber_cache)}")
+    
+    # 总结处理结果
+    valid_changes = sum(1 for v in holdernumber_cache.values() if v != 0)
+    logger.info(f"✅ 股东人数数据缓存完成：成功处理 {success_count}/{len(uncached_codes)} 支股票，有效变化数据 {valid_changes} 条")
 
 
 def evaluate_holdernumber(ts_code: str) -> float:
@@ -970,26 +1084,148 @@ def evaluate_holdernumber(ts_code: str) -> float:
     return 0
 
 
-def initialize_express_data(period: str, ts_codes: List[str]):
+def initialize_express_data(period: str = None, ts_codes: List[str] = None):
+    """初始化业绩快报数据，获取最新一期的业绩同比增长率
+    
+    Args:
+        period: 报告期(每个季度最后一天的日期,比如20231231表示年报)，如果为None则获取最近的报告期
+        ts_codes: 需要查询的股票代码列表，如果为None则不过滤
+    """
     logger.info("🚨 初始化业绩快报数据...")
-
+    
+    # 确定查询参数
+    if period is None:
+        # 自动计算最近的报告期（每个季度最后一个月的最后一天）
+        today = datetime.today()
+        year = today.year
+        # 确定最近的季度结束月份（3,6,9,12）
+        month = (today.month - 1) // 3 * 3 + 3
+        if month > today.month:
+            # 如果计算的月份超过当前月份，则使用上一个季度
+            if month == 3:  
+                month = 12
+                year -= 1
+            else:
+                month -= 3
+                
+        # 构建报告期字符串：如 20231231 表示2023年年报
+        if month == 12:
+            period = f"{year}1231"  # 年报
+        elif month == 9:
+            period = f"{year}0930"  # 三季报
+        elif month == 6:
+            period = f"{year}0630"  # 半年报
+        elif month == 3:
+            period = f"{year}0331"  # 一季报
+            
+        logger.info(f"自动计算最近报告期: {period}")
+    
     try:
-        df = safe_api_call(pro.express_vip, period=period, fields='ts_code,ann_date,end_date,revenue,operate_profit,total_profit,n_income,total_assets')
-
+        # 构建查询字段，确保包含同比增长率字段
+        fields = 'ts_code,ann_date,end_date,revenue,operate_profit,total_profit,n_income,total_assets,yoy_net_profit,yoy_sales,yoy_op'
+        
+        # 根据文档，express_vip接口可以获取某一报告期全部股票数据
+        df = safe_api_call(pro.express_vip, period=period, fields=fields)
+        
+        # 检查数据有效性
         if df is None or df.empty:
-            logger.warning(f"⚠️ {period} 的业绩快报数据为空")
-            return
-
+            logger.warning(f"⚠️ {period} 期间的业绩快报数据为空")
+            
+            # 尝试获取前一个季度的数据
+            try:
+                prev_period = get_previous_period(period)
+                logger.info(f"尝试获取前一期报告期数据: {prev_period}")
+                df = safe_api_call(pro.express_vip, period=prev_period, fields=fields)
+                
+                if df is None or df.empty:
+                    logger.warning(f"⚠️ 前一期 {prev_period} 的数据也为空，放弃获取")
+                    return
+                    
+                logger.info(f"✅ 成功获取前一期 {prev_period} 的业绩快报数据, 包含 {len(df)} 支股票")
+            except Exception as e:
+                logger.error(f"获取前一期数据失败: {e}")
+                return
+        
+        # 过滤指定的股票代码（如果提供了）
+        if ts_codes is not None:
+            ts_codes_set = set(ts_codes)
+            df = df[df['ts_code'].isin(ts_codes_set)]
+            logger.info(f"过滤指定的 {len(ts_codes)} 支股票，过滤后剩余 {len(df)} 支")
+        
+        # 处理数据，提取同比增长率
+        processed_count = 0
         for index, row in df.iterrows():
-            ts_code = row['ts_code']
-            profit_yoy = row.get('net_profit_yoy', 0) or row.get('yoy_net_profit', 0) or row.get('yoy_sales', 0)
-            express_cache[ts_code] = profit_yoy
-            logger.info(f"{ts_code} 业绩快报净利同比：{profit_yoy:.1f}%")
-
-        logger.info(f"✅ 业绩快报数据缓存完成：{len(express_cache)} 支股票")
-
+            try:
+                ts_code = row['ts_code']
+                
+                # 优先使用 yoy_net_profit (净利润同比增长率)
+                # 如果没有，则尝试使用 yoy_sales (营收同比增长率)
+                # 如果都没有，则尝试使用 yoy_op (营业利润同比增长率)
+                profit_yoy = (
+                    row.get('yoy_net_profit', None) or 
+                    row.get('net_profit_yoy', None) or 
+                    row.get('yoy_sales', None) or 
+                    row.get('yoy_op', None) or 
+                    0
+                )
+                
+                # 确保转换为浮点数
+                try:
+                    profit_yoy = float(profit_yoy)
+                except (ValueError, TypeError):
+                    profit_yoy = 0
+                
+                # 保存到缓存
+                express_cache[ts_code] = profit_yoy
+                
+                # 对于显著的增长或下滑，记录日志
+                if abs(profit_yoy) > 30:
+                    if profit_yoy > 0:
+                        logger.info(f"{ts_code} 业绩快报净利同比大幅增长：+{profit_yoy:.1f}%")
+                    else:
+                        logger.warning(f"{ts_code} 业绩快报净利同比大幅下滑：{profit_yoy:.1f}%")
+                        
+                processed_count += 1
+                
+            except Exception as e:
+                logger.warning(f"处理股票 {row.get('ts_code', '未知')} 的业绩数据失败: {e}")
+        
+        # 更新统计信息
+        logger.info(f"✅ 业绩快报数据缓存完成：共获取 {len(df)} 支股票数据，成功处理 {processed_count} 支")
+        
+        # 输出一些统计信息
+        if processed_count > 0:
+            # 计算业绩增长股票比例
+            growth_stocks = sum(1 for v in express_cache.values() if v > 0)
+            decline_stocks = sum(1 for v in express_cache.values() if v < 0)
+            growth_ratio = growth_stocks / processed_count if processed_count > 0 else 0
+            
+            logger.info(f"📊 业绩统计: 增长 {growth_stocks} 支 ({growth_ratio:.1%}), 下滑 {decline_stocks} 支 ({1-growth_ratio:.1%})")
+        
     except Exception as e:
         logger.error(f"获取业绩快报数据失败 for {period}: {e}")
+        logger.error(f"详细错误: {traceback.format_exc()}")
+
+
+def get_previous_period(period: str) -> str:
+    """获取上一个报告期
+    
+    例如：20231231 -> 20230930, 20230930 -> 20230630, 等
+    """
+    year = int(period[:4])
+    month = int(period[4:6])
+    
+    if month == 12:  # 年报
+        return f"{year}0930"  # 返回同年三季报
+    elif month == 9:  # 三季报
+        return f"{year}0630"  # 返回同年半年报
+    elif month == 6:  # 半年报
+        return f"{year}0331"  # 返回同年一季报
+    elif month == 3:  # 一季报
+        return f"{year-1}1231"  # 返回上一年年报
+    else:
+        # 不规范的报告期，返回原值
+        return period
 
 
 def evaluate_express(ts_code: str) -> float:
@@ -1097,30 +1333,38 @@ def initialize_risk_data(ts_codes: List[str]):
     logger.info(f"✅ 风险数据初始化完成 | 质押率:{len(pledge_stat_cache)} 质押次数:{sum(pledge_detail_cache.values())} 减持:{sum(holder_trade_cache.values())}")
 
 def evaluate_risk_factors(ts_code: str) -> float:
+    # 确保使用短代码格式进行查找
+    short_code = ts_code.split('.')[0] if '.' in ts_code else ts_code
+    
     penalty = 0
-
-    pledg_ratio = pledge_stat_cache.get(ts_code, 0)
+    
+    # 使用短代码格式查询缓存
+    pledg_ratio = pledge_stat_cache.get(short_code, 0)
     if pledg_ratio >= 60:
         penalty -= 12
     elif pledg_ratio >= 40:
         penalty -= 8
     elif pledg_ratio >= 30:
         penalty -= 5
-
-    pledge_times = pledge_detail_cache.get(ts_code, 0)
+        
+    pledge_times = pledge_detail_cache.get(short_code, 0)
     if pledge_times >= 5:
         penalty -= 4
     elif pledge_times >= 2:
         penalty -= 2
-
-    reduce_times = holder_trade_cache.get(ts_code, 0)
+        
+    reduce_times = holder_trade_cache.get(short_code, 0)
     if reduce_times >= 3:
         penalty -= 6
     elif reduce_times >= 1:
         penalty -= 3
-
+        
     if penalty != 0:
         logger.debug(f"{ts_code} 风险扣分：{penalty} (质押率: {pledg_ratio}%, 质押次数: {pledge_times}, 减持次数: {reduce_times})")
+    else:
+        # 增加零分调试信息
+        logger.debug(f"{ts_code} 风险评估: 质押率:{pledg_ratio}% 质押次数:{pledge_times} 减持次数:{reduce_times}")
+    
     return penalty
 
 
@@ -2501,6 +2745,162 @@ def evaluate_yang_cross_strength(df: pd.DataFrame) -> str:
         return "⚠️中等穿线"
     else:
         return "❌弱穿线"
+def evaluate_turnover(ts_code: str, turnover: float, strategy_mode: str) -> Tuple[float, str]:
+    """
+    更细致的换手率评分
+    
+    返回: (得分, 评价描述)
+    """
+    # 1. 获取历史换手率数据
+    try:
+        # 获取过去30日换手率数据
+        end_date = datetime.today().strftime('%Y%m%d')
+        start_date = (datetime.today() - timedelta(days=30)).strftime('%Y%m%d')
+        
+        hist_data = safe_api_call(
+            pro.daily_basic, 
+            ts_code=ts_code, 
+            start_date=start_date, 
+            end_date=end_date,
+            fields='trade_date,turnover_rate'
+        )
+        
+        # 计算历史数据
+        if not hist_data.empty and len(hist_data) > 5:
+            # 计算历史均值和标准差
+            avg_turnover = hist_data['turnover_rate'].mean()
+            max_turnover = hist_data['turnover_rate'].max()
+            min_turnover = hist_data['turnover_rate'].min()
+            
+            # 计算最近5日换手率变化趋势的斜率
+            recent_data = hist_data.sort_values('trade_date', ascending=True).tail(5)
+            
+            # 使用numpy计算趋势斜率
+            if len(recent_data) >= 3:
+                try:
+                    import numpy as np
+                    x = np.arange(len(recent_data))
+                    y = recent_data['turnover_rate'].values
+                    slope, _ = np.polyfit(x, y, 1)
+                    # 斜率大于0表示上升趋势
+                    trend = slope
+                except:
+                    # 如果计算失败，回退到简单比较
+                    trend = 1 if recent_data['turnover_rate'].iloc[-1] > recent_data['turnover_rate'].iloc[0] else -1
+            else:
+                trend = 1 if recent_data['turnover_rate'].iloc[-1] > recent_data['turnover_rate'].iloc[0] else -1
+            
+            # 计算相对于历史的位置
+            if avg_turnover > 0:
+                relative_position = turnover / avg_turnover
+            else:
+                relative_position = 1.0
+        else:
+            # 无历史数据时的默认值
+            avg_turnover = turnover
+            max_turnover = turnover * 1.5
+            min_turnover = turnover * 0.5
+            trend = 0
+            relative_position = 1.0
+    except Exception as e:
+        logger.warning(f"换手率历史数据获取失败 {ts_code}: {str(e)}")
+        # 出错时使用默认值
+        avg_turnover = turnover
+        max_turnover = turnover * 1.5
+        min_turnover = turnover * 0.5
+        trend = 0
+        relative_position = 1.0
+    
+    # 2. 根据不同策略设置基础分值范围
+    if strategy_mode == "稳健型":
+        # 稳健型对应的换手率理想区间
+        ideal_min, ideal_max = 2.0, 10.0
+        too_low = 1.0
+        too_high = 15.0
+        max_score = 8
+    elif strategy_mode == "穿线型":
+        # 穿线型需要足够的活跃度
+        ideal_min, ideal_max = 4.0, 15.0
+        too_low = 2.0
+        too_high = 25.0
+        max_score = 12
+    else:  # 激进型
+        # 激进型追求较高活跃度
+        ideal_min, ideal_max = 3.0, 18.0
+        too_low = 1.5
+        too_high = 30.0
+        max_score = 10
+    
+    # 3. 基于多维度评估计算最终得分
+    
+    # 基础分：基于换手率绝对值
+    if turnover < too_low:
+        base_score = max_score * 0.3  # 过低的换手率给予较低分数
+        eval_text = "换手率过低"
+    elif turnover > too_high:
+        base_score = max_score * 0.4  # 过高的换手率也降低评分
+        eval_text = "换手率过高"
+    elif ideal_min <= turnover <= ideal_max:
+        # 在理想区间内，给予满分
+        base_score = max_score
+        eval_text = "换手率理想"
+    else:
+        # 在可接受但非理想区间，线性插值
+        if turnover < ideal_min:
+            base_score = max_score * 0.5 + (turnover - too_low) / (ideal_min - too_low) * max_score * 0.5
+            eval_text = "换手率偏低"
+        else:  # turnover > ideal_max
+            base_score = max_score * 0.7 + (too_high - turnover) / (too_high - ideal_max) * max_score * 0.3
+            eval_text = "换手率偏高"
+    
+    # 趋势加分：更精细的趋势评估
+    if isinstance(trend, (int, float)):
+        if trend > 0.2:  # 明显上升趋势
+            trend_bonus = 3
+            trend_text = "，换手率明显上升"
+        elif trend > 0:  # 轻微上升趋势
+            trend_bonus = 1
+            trend_text = ""
+        elif trend < -0.2:  # 明显下降趋势
+            trend_bonus = -1
+            trend_text = "，换手率下降"
+        else:  # 轻微下降或平稳
+            trend_bonus = 0
+            trend_text = ""
+        
+        if trend_text:
+            eval_text += trend_text
+    else:
+        # 回退到简单判断
+        trend_bonus = 2 if trend > 0 else 0
+    
+    # 相对历史位置加分（优化版）
+    if 1.2 <= relative_position <= 2.0:
+        relative_bonus = 3  # 高于历史均值20%-100%是理想的
+        eval_text += "，高于历史均值"
+    elif 2.0 < relative_position <= 3.0:
+        relative_bonus = 2  # 高于均值2-3倍也给一定加分
+        eval_text += "，远高于历史均值"
+    elif relative_position > 3.0:
+        relative_bonus = 0  # 超过3倍可能是异常波动，不加分
+        eval_text += "，异常高于历史水平"
+    elif 0.8 <= relative_position < 1.2:
+        relative_bonus = 1  # 接近历史均值也给少量加分
+        eval_text += "，接近历史均值"
+    else:  # < 0.8
+        relative_bonus = 0
+        if relative_position < 0.5:
+            eval_text += "，显著低于历史水平"
+    
+    # 计算最终得分（设置上限并向下取整）
+    final_score = min(15, int(base_score + trend_bonus + relative_bonus))
+    
+    # 记录详细信息
+    logger.debug(f"{ts_code} 换手率评分: {final_score} (当前:{turnover:.2f}%, "
+                f"均值:{avg_turnover:.2f}%, 趋势:{'+' if trend > 0 else '-'}, "
+                f"相对位置:{relative_position:.2f})")
+    
+    return final_score, eval_text
 
 def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[str, float]],
                    strategies: List[str],
@@ -2586,7 +2986,8 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
     initialize_top_inst()
     initialize_share_float_data(ts_codes)
     initialize_holdernumber_data(ts_codes)
-   
+    initialize_express_data(ts_codes=ts_codes)
+    
     current_suspend = set(pro.suspend_d(trade_date=actual_trade_date)['ts_code'].str.upper())
     ts_codes = [code for code in ts_codes if code not in current_suspend]
 
@@ -2607,7 +3008,7 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
         type_weights["风险型"] = max(-3.0, type_weights.get("风险型", -1.0) * 0.8)
     elif strategy_mode == "穿线型":
         # 穿线型策略特殊调整
-        type_weights["穿线型"] *= 1.5  
+        type_weights["穿线型"] *= 1.25  
         type_weights["趋势型"] *= 0.8
         type_weights["动量型"] *= 0.8
         type_weights["风险型"] = max(-2.0, type_weights.get("风险型", -1.0) * 0.6)
@@ -2738,7 +3139,7 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
             market_neutral_weight = merged_weights.get("市场中性型", 1.0)
             rs_score = MarketNeutralAnalyzer.calculate_relative_strength(ts_code, actual_trade_date)
             neutral_bonus = rs_score * 10
-            neutral_bonus_weighted = neutral_bonus * market_neutral_weight * 0.5
+            neutral_bonus_weighted = min(12, neutral_bonus * market_neutral_weight * 0.4) 
             score += neutral_bonus_weighted
             score_details['市场中性得分'] = neutral_bonus_weighted
             
@@ -2773,6 +3174,12 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
             score += top_inst_score
             logger.debug(f"🏦 {ts_code} 主力资金得分: {top_inst_score}")
             
+            # 加入资金流向评分
+            moneyflow_score = evaluate_moneyflow(ts_code)
+            score += moneyflow_score
+            logger.debug(f"💰 {ts_code} 资金流向得分: {moneyflow_score}")
+            score_details['资金流向得分'] = moneyflow_score
+
             score += concept_trend_score
             score_details['概念趋势得分'] = concept_trend_score
 
@@ -2789,23 +3196,17 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
                 removal_stats["换手率过低"] += 1
                 logger.info(f"🛑 {ts_code} 被筛除，原因：换手率过低")
                 return None
-            
+            # 使用新的换手率评分函数
+            turnover_score, turnover_eval = evaluate_turnover(ts_code, turnover, strategy_mode)
+            score += turnover_score
+            score_details['换手率加分'] = turnover_score
+            score_details['换手率评价'] = turnover_eval
             day_volatility = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-2]
             if day_volatility > 0.15:  # 单日波动超15%
                 removal_stats["异常波动"] += 1
                 return None
             
-            # 根据策略模式设置不同的换手率评分
-            if strategy_mode == "稳健型":
-                turnover_score = 6 if 1.5 <= turnover <= 12 else 4
-            elif strategy_mode == "穿线型":
-                # 穿线型策略更看重换手率
-                turnover_score = 10 if 4 <= turnover <= 20 else 6
-            else:
-                turnover_score = 8 if 4 <= turnover <= 15 else 4
-                
-            score += turnover_score
-            score_details['换手率加分'] = turnover_score
+        
 
             # 最后返回得分
             return (score, ts_code, name, matched, df['close'].pct_change(5).iloc[-1] * 100, df, score_details)
@@ -3218,7 +3619,7 @@ def calculate_market_sentiment() -> Tuple[str, str]:
 # ===== 创建Gradio界面 =====
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
-    # 📈 AI量化选股系统 (V25.5.15)
+    # 📈 量化选股工具 (V25.5.16)
     **功能**:
     - 使用Tushare获取当日数据（晚上8点左右更新完毕）            
     - 支持自然语言策略输入
