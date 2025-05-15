@@ -34,9 +34,10 @@ pip install -r requirements.txt
 ### 3. 配置环境
 
 #### 方法一：使用 .env 文件（推荐）
-复制 `.env.example` 到 `.env` 并填入你的API密钥：
+在根目录创建一个.env文件并填入你的API密钥：
 ```bash
-cp .env.example .env
+TUSHARE_TOKEN=（必须填写）
+DEEPSEEK_API_KEY=（目前功能未完善，可以不填）
 ```
 
 然后编辑 `.env` 文件：
