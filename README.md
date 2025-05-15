@@ -19,10 +19,8 @@
 
 ## 快速开始
 
-### 1. 克隆项目
+### 1. 下载项目
 
-git clone https://github.com/yourusername/quant-stock-selection.git
-cd quant-stock-selection
 ```
 
 ### 2. 安装依赖
