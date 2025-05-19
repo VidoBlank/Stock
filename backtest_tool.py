@@ -440,18 +440,51 @@ def buy_stock(account, stock, score, pct_change, risk_warnings, trade_date, batc
     if stock_quantity > 0:
         cost = stock_quantity * buy_price
         account['equity'] -= cost
+        
+        # 确保记录了正确的买入日期
+        # 注意：检查 stock[0] 是否为买入日期，如果不是则使用 trade_date
+        buy_date = stock[0] if isinstance(stock[0], str) and len(stock[0]) == 8 else trade_date
+        
+        # 获取风险等级信息
+        risk_level = "未知"
+        if len(stock) > 6 and isinstance(stock[6], dict):
+            score_details = stock[6]
+            if 'trading_pattern' in score_details and isinstance(score_details['trading_pattern'], dict):
+                trading_pattern = score_details['trading_pattern']
+                if 'risk_level' in trading_pattern:
+                    risk_level = trading_pattern['risk_level']
+        
         account['positions'].append({
-            'ts_code': stock[1], 'buy_price': buy_price, 'quantity': stock_quantity,
-            'buy_date': stock[0], 'days_held': 0, 'max_profit_pct': 0, 'buy_count': 1,
+            'ts_code': stock[1], 
+            'buy_price': buy_price, 
+            'quantity': stock_quantity,
+            'buy_date': buy_date,  # 确保这是正确的日期格式
+            'days_held': 0, 
+            'max_profit_pct': 0, 
+            'buy_count': 1,
+            'status': 'active',  # 添加状态字段
+            'last_updated': trade_date,  # 添加最后更新日期
             'target_price': buy_price * (1 + account['expected_return'] / 100),
-            'ma5': ma5, 'atr': atr
+            'ma5': ma5, 
+            'atr': atr,
+            'risk_level': risk_level  # 新增：记录风险等级
         })
+        
+        # 同样确保买入记录中有正确的日期
         account['buy_records'].append({
-            'ts_code': stock[1], 'buy_price': buy_price, 'quantity': stock_quantity,
-            'buy_date': stock[0], 'position_pct': position_pct, 'allocated_amount': cost,
-            'score': score, 'market_status': market_status, 'ma5': ma5,
-            'atr': atr, 'trend_day_count': trend_day_count,
-            'dynamic_risk_cap': dynamic_risk_cap  # 记录当时的风险敞口
+            'ts_code': stock[1], 
+            'buy_price': buy_price, 
+            'quantity': stock_quantity,
+            'buy_date': buy_date,  # 确保这是正确的日期
+            'position_pct': position_pct, 
+            'allocated_amount': cost,
+            'score': score, 
+            'market_status': market_status, 
+            'ma5': ma5,
+            'atr': atr, 
+            'trend_day_count': trend_day_count,
+            'dynamic_risk_cap': dynamic_risk_cap,
+            'risk_level': risk_level  # 新增：记录风险等级
         })
         if cost > 0.1 and position_pct < 0.03:
             logger.info(f"🛑 小仓位高成本跳过  仓位:{position_pct:.2%}")
@@ -727,7 +760,7 @@ def should_sell(position, current_price, account):
     if position.get('is_short'):
         # 空头平仓逻辑
         profit_pct = (position['short_price'] - current_price) / position['short_price'] * 100
-        position['days_held'] += 1
+        # 移除这一行: position['days_held'] += 1
         position['max_profit_pct'] = max(position.get('max_profit_pct', profit_pct), profit_pct)
         
         # 空头止损止盈（比多头更严格）
@@ -749,13 +782,17 @@ def should_sell(position, current_price, account):
             return "异常价格平仓"
             
         profit_pct = (current_price - buy_price) / buy_price * 100
-        position['days_held'] += 1
+        # 移除这一行: position['days_held'] += 1
         position['max_profit_pct'] = max(position.get('max_profit_pct', profit_pct), profit_pct)
         
-        # ============== 关键优化点 ==============
-        # 1. 放宽保护期止损阈值 (通过参数调整)
+        # 添加强制高收益止盈
+        if profit_pct >= 15.0:
+            logger.info(f"🔥 强制高收益止盈 {position['ts_code']} | 收益:{profit_pct:.1f}%")
+            return "强制高收益止盈"
+            
+        # 保护期逻辑
         if position['days_held'] < 3:
-            if profit_pct <= account['stop_loss'] * 1.8:
+            if profit_pct <= account['stop_loss'] * 2.0:  # 从1.8改为2.0，放宽保护期止损
                 logger.info(f"⚠️ 保护期内强制止损 {position['ts_code']} | 亏损:{profit_pct:.1f}%")
                 return "保护期止损"
             logger.debug(f"🔒 {position['ts_code']} 持仓保护期 | 持有{position['days_held']}天")
@@ -775,18 +812,17 @@ def should_sell(position, current_price, account):
         else:
             dynamic_return *= 0.9  # 趋势不符合时降低预期
 
-        # ============== 卖出条件优先级优化 ==============
         # 强制止损条件（阈值通过stop_loss参数控制）
         if profit_pct <= account['stop_loss'] * 1.5:  # stop_loss=-5时实际触发线为-7.5%
             logger.info(f"📉 强制止损 {position['ts_code']} | 亏损:{profit_pct:.1f}%")
             return "强制止损"
             
-        # 加速止盈条件（保持代码不变，依赖3d_gain数据）
+        # 加速止盈条件
         if position.get('3d_gain', 0) > 20 and profit_pct > 15:
             logger.info(f"🚀 加速止盈 {position['ts_code']} | 三日涨幅:{position['3d_gain']}%")
             return "加速止盈"
             
-        # 动态止盈条件（通过expected_return参数调整触发率）
+        # 动态止盈条件
         if profit_pct >= dynamic_return * 1.5:
             logger.info(f"🎯🔥 超额止盈 {position['ts_code']} | 收益:{profit_pct:.1f}%")
             return "超额止盈"
@@ -795,19 +831,19 @@ def should_sell(position, current_price, account):
             logger.info(f"🎯 基础止盈 {position['ts_code']} | 收益:{profit_pct:.1f}%")
             return "基础止盈"
         
-        # 波动止损条件（参数影响ATR计算）
+        # 波动止损条件
         current_drawdown = position['max_profit_pct'] - profit_pct
         if current_drawdown >= trailing_stop:
             logger.info(f"📉 波动止损 {position['ts_code']} | 回撤:{current_drawdown:.1f}%≥{trailing_stop:.1f}%")
             return "波动止损"
             
-        # 时间止损条件（参数调整阈值）
+        # 时间止损条件
         if position['days_held'] >= int(account['holding_days']*0.8):
             if profit_pct < max(2.0, account['expected_return']*0.3):
                 logger.info(f"⌛ 时间止损 {position['ts_code']} | 持有:{position['days_held']}天 收益:{profit_pct:.1f}%")
                 return "时间止损"
                 
-        # 保本条件（增加波动过滤）
+        # 保本条件
         if profit_pct <= 0 and position['days_held'] > 5 and position['atr']/buy_price < 0.03:
             logger.info(f"🛡️ 保本退出 {position['ts_code']} | 持有{position['days_held']}天")
             return "保本退出"
@@ -816,17 +852,213 @@ def should_sell(position, current_price, account):
 
 market_status_cache = {}
 get_market_status.market_indicators_cache = {}
+def check_and_fix_positions(accounts):
+    """检查并修复持仓数据的完整性"""
+    for mode in accounts:
+        account = accounts[mode]
+        
+        # 检查是否有状态字段缺失的持仓
+        for pos in account['positions']:
+            if 'status' not in pos:
+                logger.warning(f"🔧 发现状态字段缺失的持仓: {pos['ts_code']}, 已修复为'active'")
+                pos['status'] = 'active'
+        
+        # 检查是否有应该被移除但未移除的持仓
+        sold_positions = [p for p in account['positions'] if p.get('status') == 'sold']
+        if sold_positions:
+            logger.warning(f"🔧 发现{len(sold_positions)}只已卖出但未移除的持仓，将在下个交易日移除")
+            for pos in sold_positions:
+                logger.warning(f"  - 待移除: {pos['ts_code']} | 卖出原因: {pos.get('sell_reason', '未知')}")
+def format_positions_data(accounts, prices_dict, trade_date_str):
+    """将当前持仓格式化为DataFrame以在UI中显示"""
+    position_data = []
+    
+    for mode in accounts:
+        account = accounts[mode]
+        positions = account['positions']
+        
+        for pos in positions:
+            ts_code = pos['ts_code']
+            status = pos.get('status', 'active')
+            
+            # 根据状态使用不同的价格和计算方式
+            if status == 'sold':
+                # 已卖出的持仓
+                current_price = pos.get('sell_price', 0)
+                entry_price = pos.get('buy_price', pos.get('short_price', 0))
+                profit_pct = pos.get('profit_pct', 0)
+                position_type = "空头" if pos.get('is_short') else "多头"
+                position_status = f"已卖出({pos.get('sell_reason', '未知')})"
+            else:
+                # 活跃持仓
+                current_price = prices_dict.get(ts_code)
+                if not current_price:
+                    current_price = get_recent_or_market_avg_price(ts_code, trade_date_str)
+                    if not current_price:
+                        current_price = pos.get('buy_price') or pos.get('short_price') or 0
+                
+                # 计算持仓盈亏
+                if pos.get('is_short'):
+                    # 空头持仓
+                    entry_price = pos['short_price']
+                    profit_pct = (entry_price - current_price) / entry_price * 100
+                    position_type = "空头"
+                else:
+                    # 多头持仓
+                    entry_price = pos['buy_price']
+                    profit_pct = (current_price - entry_price) / entry_price * 100
+                    position_type = "多头"
+                position_status = "持有中"
+            
+            # 计算实际持有天数（基于交易日）
+            entry_date = pos.get('buy_date', '未知')
+            if entry_date != '未知':
+                try:
+                    # 如果有买入日期，计算与当前日期的差距
+                    entry_date_obj = datetime.strptime(entry_date, '%Y%m%d')
+                    current_date_obj = datetime.strptime(trade_date_str, '%Y%m%d')
+                    
+                    # 计算日历天数
+                    calendar_days = (current_date_obj - entry_date_obj).days
+                    
+                    # 核对与系统记录的持仓天数
+                    system_days_held = pos.get('days_held', 0)
+                    
+                    # 记录两种天数供比较
+                    days_held_info = f"{system_days_held}天(系统) / {calendar_days}天(日历)"
+                except Exception as e:
+                    days_held_info = f"{pos.get('days_held', 0)}天 (解析错误)"
+            else:
+                days_held_info = f"{pos.get('days_held', 0)}天"
+            
+            # 添加数据行
+            position_data.append({
+                "策略": mode,
+                "状态": position_status,
+                "股票代码": ts_code,
+                "持仓类型": position_type,
+                "买入日期": entry_date,
+                "买入/卖空价": f"{entry_price:.2f}",
+                "现价/卖价": f"{current_price:.2f}",
+                "持有数量": pos['quantity'],
+                "持有天数": days_held_info,
+                "盈亏百分比": f"{profit_pct:.2f}%",
+                "盈亏金额": f"{(current_price - entry_price) * pos['quantity']:.2f}" if not pos.get('is_short') else f"{(entry_price - current_price) * pos['quantity']:.2f}",
+                "最大盈利": f"{pos.get('max_profit_pct', 0):.2f}%",
+                "最后更新": pos.get('last_updated', trade_date_str)
+            })
+    
+    # 排序：活跃持仓在前，已卖出在后，每组内按盈亏排序
+    if position_data:
+        position_df = pd.DataFrame(position_data)
+        if not position_df.empty and "状态" in position_df.columns and "盈亏百分比" in position_df.columns:
+            # 首先按状态排序（持有中在前）
+            position_df['排序值'] = position_df['状态'].apply(lambda x: 0 if "持有中" in x else 1)
+            # 然后按盈亏百分比排序
+            position_df['盈亏数值'] = position_df['盈亏百分比'].str.rstrip('%').astype(float)
+            position_df = position_df.sort_values(by=["排序值", "盈亏数值"], ascending=[True, False])
+            position_df = position_df.drop(columns=['排序值', '盈亏数值'])
+        return position_df
+    else:
+        return pd.DataFrame(columns=["策略", "状态", "股票代码", "持仓类型", "买入日期", 
+                                    "买入/卖空价", "现价/卖价", "持有数量", "持有天数", 
+                                    "盈亏百分比", "盈亏金额", "最大盈利", "最后更新"])
+    
 
-def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,  
+
+
+def calculate_risk_level_stats(accounts, strategy_modes):
+    """计算不同市场环境下各风险等级股票的胜率和盈利情况"""
+    stats_text = "📊 风险等级绩效分析\n\n"
+    
+    for mode in strategy_modes:
+        account = accounts[mode]
+        stats_text += f"【{mode}】策略风险等级分析:\n"
+        
+        # 从sell_records中提取交易结果
+        sell_records = account.get('sell_records', [])
+        if not sell_records:
+            stats_text += "  没有足够的交易记录\n\n"
+            continue
+        
+        # 按风险等级和市场状态分组统计
+        risk_market_stats = {}
+        
+        for record in sell_records:
+            # 获取风险等级
+            risk_level = record.get('risk_level', '未知')
+            
+            # 获取买入时的市场状态
+            buy_date = record.get('buy_date', 'unknown')
+            market_status = record.get('market_status', market_status_cache.get(buy_date, '未知'))
+            
+            # 计算盈亏
+            profit_pct = record.get('profit_pct', 0)
+            is_win = profit_pct > 0
+            
+            # 初始化统计数据结构
+            if market_status not in risk_market_stats:
+                risk_market_stats[market_status] = {}
+            
+            if risk_level not in risk_market_stats[market_status]:
+                risk_market_stats[market_status][risk_level] = {
+                    'total': 0, 'win': 0, 'profit_total': 0, 
+                    'max_profit': -float('inf'), 'min_profit': float('inf'),
+                    'days_held_total': 0  # 新增持仓天数统计
+                }
+            
+            # 更新统计数据
+            stats = risk_market_stats[market_status][risk_level]
+            stats['total'] += 1
+            if is_win:
+                stats['win'] += 1
+            stats['profit_total'] += profit_pct
+            stats['max_profit'] = max(stats['max_profit'], profit_pct)
+            stats['min_profit'] = min(stats['min_profit'], profit_pct)
+            
+            # 累加持仓天数
+            days_held = record.get('days_held', 0)
+            stats['days_held_total'] += days_held
+        
+        # 输出统计结果
+        for market, risk_data in risk_market_stats.items():
+            stats_text += f"\n  市场环境: {market}\n"
+            
+            # 对风险等级按总数量排序
+            sorted_risks = sorted(risk_data.items(), 
+                                key=lambda x: x[1]['total'], 
+                                reverse=True)
+            
+            for risk_level, stats in sorted_risks:
+                if stats['total'] == 0:
+                    continue
+                
+                win_rate = stats['win'] / stats['total'] * 100
+                avg_profit = stats['profit_total'] / stats['total']
+                avg_days_held = stats['days_held_total'] / stats['total']  # 计算平均持仓天数
+                
+                stats_text += f"    {risk_level}: 胜率 {win_rate:.1f}% ({stats['win']}/{stats['total']}), "
+                stats_text += f"平均收益 {avg_profit:.2f}%, "
+                stats_text += f"最大盈利 {stats['max_profit']:.2f}%, "
+                stats_text += f"最大亏损 {stats['min_profit']:.2f}%, "
+                stats_text += f"平均持仓 {avg_days_held:.1f}天\n"
+        
+        stats_text += "\n"
+    
+    return stats_text
+def run_backtest_with_realtime(start_date, end_date, holding_days, strategy_modes, markets,  
                  expected_return, stop_loss, cost, benchmark=None, max_stock_num=200, 
                  frequency_mode="每周两次", custom_days=5, initial_equity=100000.0):
-    """ 支持多空对冲的回测主逻辑（修正净值计算版本） """
+    """ 支持多空对冲的回测主逻辑（带实时UI更新） """
     from pandas.tseries.holiday import get_calendar
     from appy import StockAnalyzer, analyze_stocks, STRATEGY_WEIGHTS
 
     used_benchmark = benchmark if benchmark else BENCHMARK_INDEX
     logger.info(f"🚀 回测开始：{start_date} ~ {end_date} | 策略：{strategy_modes} | 基准：{used_benchmark}")
    
+    # 给UI反馈初始状态
+    yield "🚀 正在初始化回测...", "", "", pd.DataFrame(), "", None
+    
     # === 获取基准指数数据 ===
     benchmark_data = StockAnalyzer.pro.index_daily(
         ts_code=used_benchmark, 
@@ -836,7 +1068,9 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
     )
     if benchmark_data is None or benchmark_data.empty:
         logger.error(f"❌ 无法获取基准指数({used_benchmark})历史数据，回测中止")
-        raise ValueError(f"无法获取基准指数({used_benchmark})数据")
+        yield f"❌ 无法获取基准指数({used_benchmark})历史数据，回测中止", "", "", pd.DataFrame(), "", None
+        return
+        
     nyse = mcal.get_calendar('XSHG')
     schedule = nyse.schedule(start_date=start_date, end_date=end_date)
     valid_dates = schedule.index.to_pydatetime().tolist()
@@ -844,6 +1078,8 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
     benchmark_data['trade_date'] = pd.to_datetime(benchmark_data['trade_date'])
     benchmark_data = benchmark_data.set_index('trade_date')
     dates = valid_dates  # 使用实际交易日历
+    
+    yield f"✅ 初始化完成，共 {len(dates)} 个交易日待回测", "", "", pd.DataFrame(), "", None
 
     # === 初始化多空账户（添加穿线型策略账户） ===
     accounts = {
@@ -857,7 +1093,7 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
             'expected_return': expected_return,
             'stop_loss': stop_loss,
             'holding_days': holding_days,
-            'allow_short': True if mode == "激进型" else False,
+            'allow_short': True if mode == "待定" else False,
             'short_position_ratio': 0.3,
             'strategy_mode': mode,  # 添加策略模式标识
             'used_margin': 0,
@@ -876,6 +1112,10 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
     else:
         mode_weights_map = {}
 
+    # 用于UI更新的计数器 - 增加更新频率
+    update_frequency = max(1, len(dates) // 200)  # 确保至少有200次更新
+    update_frequency = min(update_frequency, 3)   # 但最多每3天更新一次
+
     current_idx = 0
     while current_idx < len(dates):
         current_date = dates[current_idx]
@@ -889,58 +1129,108 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
             frequency_mode=frequency_mode,
             custom_days=custom_days,
         )
+        
+        # 获取当天的市场状态
+        market_status = get_market_status(trade_date_str)
+        trend_day_count = get_market_trend_days(market_status, trade_date_str)
+        vol_mom = get_market_status.market_indicators_cache.get(trade_date_str, {})
+        volatility = vol_mom.get("volatility", 0.2)
+        momentum = vol_mom.get("momentum", 0.0)
+        
+        # 准备市场状态信息
+        market_info = f"📊 市场状态: {market_status}\n"
+        market_info += f"📈 趋势持续天数: {trend_day_count}\n"
+        market_info += f"📉 市场波动率: {volatility:.2%}\n"
+        market_info += f"📊 市场动量: {momentum:.2%}\n"
+        market_info += f"🔍 是否为选股日: {'是' if selection_today else '否'}"
+
+        all_current_prices = {}  # 保存所有账户的持仓股票价格
 
         for mode in strategy_modes:
             account = accounts[mode]
 
-            # === 获取策略权重（每日动态） === 
-            market_status = get_market_status(trade_date_str)
-            trend_day_count = get_market_trend_days(market_status, trade_date_str)
-            
-          
-            
-            vol_mom = get_market_status.market_indicators_cache.get(trade_date_str, {})
-            volatility = vol_mom.get("volatility", 0.2)
-            momentum = vol_mom.get("momentum", 0.0)
-            
-
-              # 动态调整账户参数
+            # === 动态调整账户参数 ===
             dynamic_params = get_dynamic_parameters(market_status, account['base_params'], momentum)
             account.update(dynamic_params)
             type_weights = generate_strategy_weights_by_market(
                 market_status, volatility=volatility, momentum=momentum
             )
             
-            logger.info(f"📡 动态策略权重 [{mode}]：{type_weights}")
-            logger.info(f"📊 动态参数调整 [{mode}]：止盈{account['expected_return']:.1f}% | 止损{account['stop_loss']:.1f}% | 持仓天数{account['holding_days']}")
-
             # === 持仓管理 ===
             positions_to_remove = []
             current_prices = get_stock_prices_batch(
                 [pos['ts_code'] for pos in account['positions']],
                 trade_date_str
             ) if account['positions'] else {}
+            
+            # 合并所有价格到全局字典
+            all_current_prices.update(current_prices)
 
+            # 移除上一个交易日标记为已卖出的持仓
+            sold_positions = [p for p in account['positions'] if p.get('status') == 'sold']
+            for pos in sold_positions:
+                if pos.get('sell_date') and pos.get('sell_date') != trade_date_str:
+                    account['positions'].remove(pos)
+                    logger.debug(f"📦 从持仓列表中移除已卖出股票: {pos['ts_code']} | 卖出日期: {pos.get('sell_date')}")
+
+            # 首先更新所有持仓的天数 - 关键修改点1
             for pos in account['positions']:
-                pos['days_held'] += 1
+                if pos.get('status') != 'sold':  # 只更新活跃持仓的天数
+                    pos['days_held'] += 1  # 每个交易日开始就更新持仓天数
+                    pos['last_updated'] = trade_date_str
+            
+            # 再处理卖出逻辑
+            for pos in account['positions']:
                 current_price = current_prices.get(pos['ts_code'])
                 if not current_price:
                     current_price = get_recent_or_market_avg_price(pos['ts_code'], trade_date_str)
                     if not current_price:
                         current_price = pos.get('buy_price') or pos.get('short_price') or 0
                         logger.warning(f"⚡ 使用持仓价格替代 {pos['ts_code']}: {current_price}")
+                    if current_price:
+                        all_current_prices[pos['ts_code']] = current_price
 
                 sell_reason = should_sell(pos, current_price, account)
                 if sell_reason:
                     if pos.get('is_short'):
                         profit = (pos['short_price'] - current_price) * pos['quantity']
+                        profit_pct = (pos['short_price'] - current_price) / pos['short_price'] * 100
                         account['equity'] += pos.get('initial_margin', 0)
                         account['equity'] += profit * (1 - cost / 100)
                         logger.info(f"💸 平空 {pos['ts_code']} | 数量:{pos['quantity']} 盈亏:{profit:.2f}")
                     else:
                         sell_amount = current_price * pos['quantity'] * (1 - cost / 100)
+                        profit_pct = (current_price - pos['buy_price']) / pos['buy_price'] * 100
                         account['equity'] += sell_amount
                         logger.info(f"💸 卖出 {pos['ts_code']} | 数量:{pos['quantity']} 金额:{sell_amount:.2f}")
+                    
+                    # 获取风险等级
+                    risk_level = pos.get('risk_level', '未知')
+                    
+                    # 记录卖出信息
+                    account.setdefault('sell_records', []).append({
+                        'ts_code': pos['ts_code'],
+                        'sell_date': trade_date_str,
+                        'sell_price': current_price,
+                        'quantity': pos['quantity'],
+                        'buy_date': pos.get('buy_date', 'unknown'),
+                        'buy_price': pos.get('buy_price', pos.get('short_price', 0)),
+                        'days_held': pos.get('days_held', 0),
+                        'profit_pct': profit_pct,
+                        'sell_reason': sell_reason,
+                        'is_short': pos.get('is_short', False),
+                        'risk_level': risk_level,
+                        'market_status': market_status
+                    })
+                    
+                    # 标记为已卖出，但不立即移除
+                    pos['status'] = 'sold'
+                    pos['sell_date'] = trade_date_str
+                    pos['sell_price'] = current_price
+                    pos['profit_pct'] = profit_pct
+                    pos['sell_reason'] = sell_reason
+                    pos['last_updated'] = trade_date_str
+                    
                     positions_to_remove.append(pos)
 
             for pos in positions_to_remove:
@@ -950,6 +1240,8 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
             if account['pending_buys']:
                 codes = [pb['stock'][1] for pb in account['pending_buys']]
                 pending_prices = get_stock_prices_batch(codes, trade_date_str) or {}
+                all_current_prices.update(pending_prices)
+                
                 for pb in account['pending_buys'][:]:
                     buy_stock(
                         account,
@@ -995,6 +1287,7 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
 
                     recommend_codes = [s[1] for s in recs if s[1] not in held_ts_codes]
                     batch_rec_prices = get_stock_prices_batch(recommend_codes, trade_date_str) or {}
+                    all_current_prices.update(batch_rec_prices)
 
                     # 多头开仓
                     if mode == "穿线型":
@@ -1018,24 +1311,102 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
 
             # === 净值更新 ===
             total_long = sum(
-                pos['quantity'] * current_prices.get(pos['ts_code'], pos.get('buy_price', 0))
+                pos['quantity'] * all_current_prices.get(pos['ts_code'], pos.get('buy_price', 0))
                 for pos in account['positions'] if not pos.get('is_short')
             )
             total_short_liability = sum(
-                pos['quantity'] * (current_prices.get(pos['ts_code'], pos.get('short_price', 0)) - pos['short_price'])
+                pos['quantity'] * (all_current_prices.get(pos['ts_code'], pos.get('short_price', 0)) - pos['short_price'])
                 for pos in account['positions'] if pos.get('is_short')
             )
             net_value = account['equity'] + total_long - total_short_liability
             account['equity_curve'].append(net_value)
 
+        # 每隔一定天数更新UI - 增加更新频率
+        if current_idx % update_frequency == 0 or current_idx == len(dates) - 1:
+            # 确保价格数据是最新的
+            for mode in strategy_modes:
+                account = accounts[mode]
+                for pos in account['positions']:
+                    ts_code = pos['ts_code']
+                    if ts_code not in all_current_prices or all_current_prices[ts_code] == 0:
+                        latest_price = get_recent_or_market_avg_price(ts_code, trade_date_str)
+                        if latest_price:
+                            all_current_prices[ts_code] = latest_price
+            
+            # 准备进度信息
+            progress_text = f"📅 当前日期: {trade_date_str} ({current_idx+1}/{len(dates)})\n"
+            progress_text += f"⏱️ 回测进度: {(current_idx+1)/len(dates)*100:.1f}%"
+            
+            # 准备资金变化信息
+            equity_text = "💰 资金变化:\n"
+            for mode in strategy_modes:
+                account = accounts[mode]
+                initial_val = account['equity_curve'][0]
+                current_val = account['equity_curve'][-1]
+                change_pct = (current_val / initial_val - 1) * 100
+                equity_text += f"【{mode}】当前净值: {current_val:.2f} | 变化: {change_pct:+.2f}%\n"
+                
+                # 统计持仓数量
+                long_count = sum(1 for p in account['positions'] if not p.get('is_short'))
+                short_count = sum(1 for p in account['positions'] if p.get('is_short'))
+                equity_text += f"    持仓: {long_count}多 / {short_count}空\n"
+            
+            # 准备持仓数据
+            positions_df = format_positions_data(accounts, all_current_prices, trade_date_str)
+            
+            # 更新UI
+            yield progress_text, market_info, equity_text, positions_df, "", None
+
+        # 每个交易日结束时额外更新一次UI - 新增功能
+        if True:  # 每天都更新
+            # 确保价格数据是最新的
+            for mode in strategy_modes:
+                account = accounts[mode]
+                for pos in account['positions']:
+                    ts_code = pos['ts_code']
+                    if ts_code not in all_current_prices or all_current_prices[ts_code] == 0:
+                        latest_price = get_recent_or_market_avg_price(ts_code, trade_date_str)
+                        if latest_price:
+                            all_current_prices[ts_code] = latest_price
+                            
+             # 在UI更新前检查并修复持仓数据
+            check_and_fix_positions(accounts)
+            # 准备进度信息
+            progress_text = f"📅 当前交易日结束: {trade_date_str} ({current_idx+1}/{len(dates)})\n"
+            progress_text += f"⏱️ 回测进度: {(current_idx+1)/len(dates)*100:.1f}%"
+            
+            # 准备资金变化信息
+            equity_text = "💰 资金变化:\n"
+            for mode in strategy_modes:
+                account = accounts[mode]
+                initial_val = account['equity_curve'][0]
+                current_val = account['equity_curve'][-1]
+                change_pct = (current_val / initial_val - 1) * 100
+                equity_text += f"【{mode}】当前净值: {current_val:.2f} | 变化: {change_pct:+.2f}%\n"
+                
+                # 统计持仓数量
+                long_count = sum(1 for p in account['positions'] if not p.get('is_short'))
+                short_count = sum(1 for p in account['positions'] if p.get('is_short'))
+                equity_text += f"    持仓: {long_count}多 / {short_count}空\n"
+            
+            # 重新获取最新价格并更新持仓数据
+            positions_df = format_positions_data(accounts, all_current_prices, trade_date_str)
+            
+            # 更新UI
+            yield f"{progress_text} (日终更新)", market_info, equity_text, positions_df, "", None
+
         current_idx += 1
-        
+    
+    # === 清算阶段 ===    
     calendar = mcal.get_calendar('XSHG')
     last_date = dates[-1]
     extended_dates = calendar.valid_days(
         start_date=last_date + pd.Timedelta(days=1),
         end_date=last_date + pd.Timedelta(days=holding_days*2)
     ).tolist()
+
+    # 更新UI - 开始清算阶段
+    yield f"✅ 主回测阶段完成，开始清算剩余持仓 ({len(extended_dates)} 天)", "", "", pd.DataFrame(), "", None
 
     for mode in strategy_modes:
         account = accounts[mode]
@@ -1053,8 +1424,12 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
                 trade_date_str
             )
             
+            # 首先更新所有持仓的天数 - 关键修改点2
             for pos in account['positions']:
-                pos['days_held'] += 1
+                pos['days_held'] += 1  # 先更新持仓天数
+            
+            # 再处理卖出逻辑
+            for pos in account['positions']:
                 current_price = batch_prices.get(pos['ts_code'])
                 if not current_price:
                     current_price = get_recent_or_market_avg_price(pos['ts_code'], trade_date_str)
@@ -1068,13 +1443,43 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
                 if sell_reason:
                     if pos.get('is_short'):
                         profit = (pos['short_price'] - current_price) * pos['quantity']
+                        profit_pct = (pos['short_price'] - current_price) / pos['short_price'] * 100
                         account['equity'] += pos['initial_margin']
                         account['equity'] += profit * (1 - cost/100)
                         logger.warning(f"💥 强制平空 {pos['ts_code']} | 数量:{pos['quantity']} 盈亏:{profit:.2f}")
                     else:
                         sell_amount = current_price * pos['quantity'] * (1 - cost/100)
+                        profit_pct = (current_price - pos['buy_price']) / pos['buy_price'] * 100
                         account['equity'] += sell_amount
                         logger.warning(f"💥 强制卖出 {pos['ts_code']} | 数量:{pos['quantity']} 金额:{sell_amount:.2f}")
+                    
+                    # 获取风险等级
+                    risk_level = pos.get('risk_level', '未知')
+                    
+                    # 记录卖出信息
+                    account.setdefault('sell_records', []).append({
+                        'ts_code': pos['ts_code'],
+                        'sell_date': trade_date_str,
+                        'sell_price': current_price,
+                        'quantity': pos['quantity'],
+                        'buy_date': pos.get('buy_date', 'unknown'),
+                        'buy_price': pos.get('buy_price', pos.get('short_price', 0)),
+                        'days_held': pos.get('days_held', 0),
+                        'profit_pct': profit_pct,
+                        'sell_reason': sell_reason,
+                        'is_short': pos.get('is_short', False),
+                        'risk_level': risk_level,
+                        'market_status': market_status
+                    })
+                    
+                    # 标记为已卖出，但不立即移除
+                    pos['status'] = 'sold'
+                    pos['sell_date'] = trade_date_str
+                    pos['sell_price'] = current_price
+                    pos['profit_pct'] = profit_pct
+                    pos['sell_reason'] = sell_reason
+                    pos['last_updated'] = trade_date_str
+                    
                     positions_to_remove.append(pos)
 
             for pos in positions_to_remove:
@@ -1105,8 +1510,39 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
             net_value = account['equity'] + total_long - total_short_liability
             account['equity_curve'].append(net_value)
             
+            # 每隔一定天数更新UI - 加快更新频率
+            if current_extended_idx % 3 == 0 or current_extended_idx == len(extended_dates) - 1:  # 从5改为3
+                # 确保价格数据是最新的
+                for pos in account['positions']:
+                    ts_code = pos['ts_code']
+                    if ts_code not in batch_prices or batch_prices[ts_code] == 0:
+                        latest_price = get_recent_or_market_avg_price(ts_code, trade_date_str)
+                        if latest_price:
+                            batch_prices[ts_code] = latest_price
+                
+                check_and_fix_positions(accounts)
+                progress_text = f"💫 清算阶段: {trade_date_str} ({current_extended_idx+1}/{len(extended_dates)})"
+                
+                equity_text = "💰 资金变化:\n"
+                for m in strategy_modes:
+                    acc = accounts[m]
+                    initial = acc['equity_curve'][0]
+                    current = acc['equity_curve'][-1]
+                    change = (current / initial - 1) * 100
+                    equity_text += f"【{m}】当前净值: {current:.2f} | 变化: {change:+.2f}%\n"
+                    
+                    # 统计持仓数量
+                    l_count = sum(1 for p in acc['positions'] if not p.get('is_short'))
+                    s_count = sum(1 for p in acc['positions'] if p.get('is_short'))
+                    equity_text += f"    剩余持仓: {l_count}多 / {s_count}空\n"
+                
+                positions_df = format_positions_data(accounts, batch_prices, trade_date_str)
+                
+                yield progress_text, "", equity_text, positions_df, "", None
+            
             current_extended_idx += 1
 
+    # 强制清算剩余持仓
     for mode in strategy_modes:
         account = accounts[mode]
         if account['positions']:
@@ -1120,7 +1556,8 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
                     sell_amount = current_price * pos['quantity'] * (1 - cost/100)
                     account['equity'] += sell_amount
             account['positions'].clear()
-
+    check_and_fix_positions(accounts)
+    # 最终结果处理
     bench_start = benchmark_data['close'].iloc[0]
     benchmark_curve = [initial_equity * (benchmark_data.loc[d, 'close'] / bench_start) for d in dates]
 
@@ -1154,11 +1591,20 @@ def run_backtest(start_date, end_date, holding_days, strategy_modes, markets,
         total_ret, ann_ret, mdd, sharpe = calculate_risk_metrics(account['equity_curve'], initial_equity, dates)
         stats += f"""
 【{mode}】\n最终净值: {account['equity_curve'][-1]:,.2f}
-累计收益: {total_ret:.2f}%\n年化收益: {ann_ret:.2f}%\n最大回撤: {mdd:.2f}%\n夏普比率: {sharpe:.2f}\n多头交易: {len(account['buy_records'])}\n空头交易: {len(account['short_records'])}\n
+累计收益: {total_ret:.2f}%\n年化收益: {ann_ret:.2f}%\n最大回撤: {mdd:.2f}%\n夏普比率: {sharpe:.2f}
+多头交易: {len(account['buy_records'])}\n空头交易: {len(account['short_records'])}\n
 """
 
     save_backtest_results(dates, accounts, benchmark_curve, fig)
-    return stats, fig
+    
+    # 计算风险等级统计数据
+    risk_stats_text = calculate_risk_level_stats(accounts, strategy_modes)
+    
+    # 合并统计结果
+    stats += f"\n{risk_stats_text}"
+    
+    # 最终更新UI
+    yield "✅ 回测完成！", "", "", pd.DataFrame(), stats, fig
 
 def save_backtest_results(dates, accounts, benchmark_curve, fig):
     """保存回测结果"""
@@ -1186,9 +1632,10 @@ def save_backtest_results(dates, accounts, benchmark_curve, fig):
     
     print(f"✅ 回测结果已保存至 results/backtest_{timestamp}.*")
 
+
 # Gradio UI 部分
 with gr.Blocks() as demo:
-    gr.Markdown("# 📊 股票策略回测工具 (V1.1)")
+    gr.Markdown("# 📊 股票策略回测工具 (V1.2)")
 
     with gr.Row():
         start_date = gr.Textbox(label="回测开始日期", value=(datetime.today() - timedelta(days=180)).strftime('%Y%m%d'))
@@ -1215,19 +1662,33 @@ with gr.Blocks() as demo:
 
     run_btn = gr.Button("🚀 开始回测", variant="primary")
     
+    # 新增实时显示组件
+    with gr.Row():
+        backtest_progress = gr.Textbox(label="回测进度", max_lines=3)
+        market_status_info = gr.Textbox(label="市场状态", max_lines=5)
+        
+    with gr.Row():
+        equity_info = gr.Textbox(label="资金变化", max_lines=7)
+    
+    with gr.Row():
+        positions_table = gr.DataFrame(label="当前持仓情况")
+    
     with gr.Row():
         output_stats = gr.Textbox(label="回测统计结果")
         output_plot = gr.Plot(label="收益曲线对比")
 
-    # 确保inputs包含所有参数
+    # 确保inputs和outputs包含所有参数
     run_btn.click(
-        run_backtest,
+        run_backtest_with_realtime,  # 使用支持实时更新的新函数
         inputs=[
             start_date, end_date, holding_days, strategy_modes, markets,
             expected_return, stop_loss, cost, benchmark, max_stock_num,
             frequency_mode, custom_days, initial_equity
         ],
-        outputs=[output_stats, output_plot]
+        outputs=[
+            backtest_progress, market_status_info, equity_info, positions_table,
+            output_stats, output_plot
+        ]
     )
 
 if __name__ == "__main__":

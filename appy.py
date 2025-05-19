@@ -48,68 +48,95 @@ CURRENT_TRADE_DATE = None  # 回测时设置当前日期
 STRATEGY_GROUPS = {
     # ===== 核心趋势策略 =====
     "趋势型": [
-        "均线突破（5/20/30日）",  # 合并原"站上X日均线"系列
+        "均线突破（5/20/30日）",  
         "均线多头排列", 
-        "MACD零轴共振",          # 合并"MACD金叉"和"MACD零轴金叉"
-        "趋势突破确认"            # 合并"突破压力位"+"突破5日线放量"
+        "MACD零轴共振",          
+        "趋势突破确认",         
+        "KDJ同向上涨"            
     ],
     
     # ===== 量价动能策略 =====
     "动量型": [
-        "量价齐升",              # 合并"温和放量"+"突然放量"
-        "主力资金共振",          # 合并"龙虎榜异动"+"主力净流入"+"融资净买入"
-        "OBV动量引擎"           # 升级原"OBV上穿均线"
+        "量价齐升",              
+        "主力资金共振",          
+        "OBV动量引擎",           
+        "KDJ金叉",               
+        "短期突破"               
     ],
     
     # ===== 底部反转策略 =====
     "反转型": [
-        "超跌反弹（RSI+BOLL）",  # 合并"RSI超卖回升"+"BOLL下轨反弹"
-        "底部反转确认"           # 新增复合信号
+        "超跌反弹（RSI+BOLL）",  
+        "底部反转确认",          
+        "MACD底背离",            
+        "KDJ超卖反转"            
     ],
     
     # ===== 对冲策略 =====
     "市场中性型": [
-        "行业超额收益（RS改进版）", 
-        "波动率套利",
-        "量价背离"
+        #"行业超额收益（RS改进版）", 
+        #"波动率套利",
+        #"量价背离"
     ],
     
     # ===== 风险控制 =====
     "风险型": [
-        "趋势破位（MA60+MACD死叉）",  # 合并原两项
-        "高位滞涨风险"              # 新增
+     "趋势破位（MA60+MACD死叉）", 
+     "高位滞涨风险",
+     "MACD顶背离"
     ],
     
     # ===== 新增: 穿线型策略 =====
     "穿线型": [
-        "一阳穿三线",             # 新增技术指标
+        "一阳穿三线",
+        "旭日东升",
+        "涨停回踩",
+        "强势回踩",
+        "高台跳水企稳",    
+        "底部盘整突破",    
+        "量价背离突破"     
     ]
 }
+
 
 # ===== 策略权重定义 =====
 STRATEGY_WEIGHTS = {
     # === 趋势型 ===
-    "均线突破（5/20/30日）": 25,  
-    "均线多头排列": 28,             
-    "MACD零轴共振": 32,             
-    "趋势突破确认": 35,            
-    
+    "均线突破（5/20/30日）": 15,
+    "均线多头排列": 15,
+    "MACD零轴共振": 18,
+    "趋势突破确认": 23,
+    "KDJ同向上涨": 18,
+
     # === 动量型 ===
-    "量价齐升": 35,                 
-    "主力资金共振": 38,            
-    "OBV动量引擎": 37,             
-    
+    "量价齐升": 18,
+    "主力资金共振": 18,
+    "OBV动量引擎": 18,
+    "KDJ金叉": 15,
+    "短期突破": 21,
+
     # === 反转型 ===
-    "超跌反弹（RSI+BOLL）": 35,   
-    "底部反转确认": 40,
-    
+    "超跌反弹（RSI+BOLL）": 18,
+    "底部反转确认": 21,
+    "MACD底背离": 21,
+    "KDJ超卖反转": 18,
+
     # === 风险型 ===
-    "趋势破位（MA60+MACD死叉）": 25,  
-    "高位滞涨风险": 20,
-    
+    "趋势破位（MA60+MACD死叉）": -30,
+    "高位滞涨风险": -25,
+    "MACD顶背离": -30,
+
     # === 穿线型 ===
-    "一阳穿三线": 45,              
+    "一阳穿三线": 23,
+    "旭日东升": 27,
+    "涨停回踩": 30,
+    "强势回踩": 24,
+    "高台跳水企稳": 25,     
+    "底部盘整突破": 22,     
+    "量价背离突破": 26      
 }
+
+
 
 
 # ===== 板块/市场映射 =====
@@ -140,29 +167,6 @@ STRATEGY_TYPE_WEIGHTS = {
 
 
 
-# 动态扣分系数配置
-RISK_PENALTY_MULTIPLIER = {
-    "趋势破位（MA60+MACD死叉）": 1.0,  # 重大风险加倍扣分
-    "高位滞涨风险": 1.0
-}
-
-# 在函数外部定义强信号列表
-STRONG_SIGNALS = ["趋势突破确认", "主力资金共振", "底部反转确认"]
-
-
-
-POTENTIAL_SIGNALS = [
-    "均线多头排列", 
-    "BOLL中轨支撑", 
-    "MACD金叉", 
-    "突破前夕"
-]
-KEY_BUY_SIGNALS = [
-    "回踩30日线确认",
-    "突破5日线放量",
-    "MACD零轴金叉",
-    "均线多头排列"  # 新增
-]
 
 
 
@@ -1493,7 +1497,7 @@ def adjust_strategy_weights_by_market(trade_date: str = None) -> Dict[str, float
         
         # ===== 动态权重调整核心逻辑 =====
         adjusted = STRATEGY_TYPE_WEIGHTS.copy()
-        
+    
         # 根据市场状态调整
         adjustment_rules = {
             "极端熊市": {
@@ -2122,8 +2126,19 @@ class StockAnalyzer:
                 end_date = datetime.strptime(valid_date, '%Y%m%d')
                 start_date = (end_date - timedelta(days=30)).strftime('%Y%m%d')  # 获取30天的数据
 
+                # 初始化统计数据
+                filtered_stats = {
+                    "当日涨停过滤": 0,
+                    "连续涨停过滤": 0,
+                    "涨幅过大过滤": 0,
+                    "量能不足过滤": 0,
+                    "T+1友好形态": 0
+                }
+
                 # 初始化
                 not_overbought_stocks = []
+                limit_up_stocks = []  # 专门记录涨停股票
+                t1_quality_stocks = []  # T+1交易质量高的股票
 
                 # 分批处理股票，每批最多100支
                 batch_size = 100
@@ -2159,6 +2174,7 @@ class StockAnalyzer:
                                         pct_10d = stock_data['pct_chg'].tail(10).sum() if len(stock_data) >= 10 else pct_5d
                                         pct_20d = stock_data['pct_chg'].tail(20).sum() if len(stock_data) >= 20 else pct_10d
                                         pct_30d = stock_data['pct_chg'].sum()
+                                        pct_chg_today = stock_data['pct_chg'].iloc[-1]  # 当日涨幅
 
                                         # 计算单日最大涨幅
                                         max_single_day = stock_data['pct_chg'].tail(10).max() if len(stock_data) >= 10 else stock_data['pct_chg'].max()
@@ -2166,29 +2182,122 @@ class StockAnalyzer:
                                         # 🔍 成交额量能过滤 + 涨停日豁免
                                         avg_amount = stock_data['amount'].tail(5).mean()
                                         curr_amount = stock_data['amount'].iloc[-1]
-                                        pct_chg_today = stock_data['pct_chg'].iloc[-1]
                                         vol_pass = (curr_amount > 1.5 * avg_amount) or (pct_chg_today >= 9.8)  # 涨停日豁免
 
-                                        # 更严格的涨幅判断条件
-                                        is_not_overbought = (
-                                            pct_3d < 20 and
-                                            pct_5d < 10 and
-                                            pct_10d < 15 and
-                                            pct_20d < 20 and
-                                            pct_30d < 30 and
-                                            max_single_day < 7
-                                        )
-
-                                        recent_pullback = stock_data['pct_chg'].tail(5).min() < -3
-
-                                        if vol_pass and (is_not_overbought or (recent_pullback and pct_5d < 20)):
-                                            not_overbought_stocks.append(ts_code)
-
-                                        if len(not_overbought_stocks) <= 20:
-                                            logger.debug(f"{ts_code}: 3d={pct_3d:.1f}%, 5d={pct_5d:.1f}%, "
-                                                         f"10d={pct_10d:.1f}%, 20d={pct_20d:.1f}%, "
-                                                         f"max_single={max_single_day:.1f}%, vol_pass={vol_pass}, "
-                                                         f"pullback={recent_pullback}, selected={ts_code in not_overbought_stocks}")
+                                        # 检查是否有涨停
+                                        has_limit_up = (stock_data['pct_chg'] >= 9.5).any()
+                                        limit_up_count = (stock_data['pct_chg'] >= 9.5).sum()
+                                        
+                                        # 条件分支：有涨停的走独立分支判断
+                                        if has_limit_up:
+                                            # 记录涨停日期
+                                            limit_up_dates = stock_data[stock_data['pct_chg'] >= 9.5]['trade_date'].tolist()
+                                            latest_limit_up = max(limit_up_dates) if limit_up_dates else None
+                                            
+                                            # 检查是否当天涨停 - T+1核心优化点
+                                            if latest_limit_up == valid_date:
+                                                filtered_stats["当日涨停过滤"] += 1
+                                                logger.debug(f"{ts_code}: 当日涨停，不适合T+1交易，跳过")
+                                                continue  # 跳过当天涨停的股票
+                                            
+                                            # 检查是否连续涨停
+                                            is_consecutive_limit = False
+                                            for j in range(1, len(stock_data) - 1):
+                                                if (stock_data['pct_chg'].iloc[-j] >= 9.5 and 
+                                                    stock_data['pct_chg'].iloc[-(j+1)] >= 9.5):
+                                                    is_consecutive_limit = True
+                                                    break
+                                            
+                                            if is_consecutive_limit:
+                                                filtered_stats["连续涨停过滤"] += 1
+                                                logger.debug(f"{ts_code}: 连续涨停，波动风险较大，跳过")
+                                                continue  # 跳过连续涨停的股票
+                                            
+                                            # 昨日涨停特殊处理 - T+1优化点
+                                            days_since_last_limit = (end_date - datetime.strptime(latest_limit_up, '%Y%m%d')).days
+                                            if days_since_last_limit == 1:
+                                                # 昨日涨停股如果不符合特定条件则跳过，降低高开风险
+                                                if pct_chg_today < -2:  # 今日有明显回调可以考虑
+                                                    # 分析K线形态判断次日是否适合T+1
+                                                    if 'open' in stock_data.columns and 'close' in stock_data.columns:
+                                                        last_open = stock_data['open'].iloc[-1]
+                                                        last_close = stock_data['close'].iloc[-1]
+                                                        last_high = stock_data['high'].iloc[-1]
+                                                        last_low = stock_data['low'].iloc[-1]
+                                                        
+                                                        # 下影线长+收阳，支撑确认，适合T+1
+                                                        has_support = (last_close > last_open) and ((last_open - last_low) / (last_high - last_low + 0.001) > 0.3)
+                                                        
+                                                        if not has_support:
+                                                            logger.debug(f"{ts_code}: 昨日涨停今日回调，但缺乏支撑确认，T+1风险较高")
+                                                            continue
+                                            
+                                            # 涨停股特殊条件：保留有1-3次涨停且量能条件满足
+                                            should_keep = (limit_up_count <= 3 and vol_pass)
+                                            
+                                            if should_keep:
+                                                not_overbought_stocks.append(ts_code)
+                                                limit_up_stocks.append((ts_code, limit_up_count, latest_limit_up))
+                                                logger.debug(f"{ts_code}: 有{limit_up_count}次涨停, 最近涨停日期:{latest_limit_up}, selected=True")
+                                        else:
+                                            # 无涨停股走更严格的判断逻辑 - T+1优化点
+                                            is_not_overbought = (
+                                                pct_3d < 15 and        # 从20%降至15%
+                                                pct_5d < 10 and       
+                                                pct_10d < 15 and
+                                                pct_20d < 20 and
+                                                pct_30d < 30 and
+                                                max_single_day < 6 and  # 从7%降至6%
+                                                pct_chg_today < 5      # 新增当日涨幅限制
+                                            )
+                                            
+                                            if not is_not_overbought:
+                                                filtered_stats["涨幅过大过滤"] += 1
+                                                continue
+                                            
+                                            # 量能不足过滤
+                                            if not vol_pass:
+                                                filtered_stats["量能不足过滤"] += 1
+                                                continue
+                                            
+                                            recent_pullback = stock_data['pct_chg'].tail(5).min() < -3
+                                            
+                                            # 分析T+1友好形态 - T+1优化点
+                                            if 'open' in stock_data.columns and 'close' in stock_data.columns:
+                                                last_open = stock_data['open'].iloc[-1]
+                                                last_close = stock_data['close'].iloc[-1]
+                                                last_high = stock_data['high'].iloc[-1]
+                                                last_low = stock_data['low'].iloc[-1]
+                                                
+                                                # 计算下影线比例
+                                                min_price = min(last_open, last_close)
+                                                lower_shadow_ratio = (min_price - last_low) / (last_high - last_low + 0.001)
+                                                
+                                                # 实体相对大小
+                                                body_size = abs(last_close - last_open) / (last_high - last_low + 0.001)
+                                                
+                                                # 是否收阳
+                                                is_yang = last_close > last_open
+                                                
+                                                # T+1高胜率形态判断
+                                                t1_favorable = (
+                                                    (lower_shadow_ratio > 0.3 and is_yang) or  # 带长下影阳线
+                                                    (body_size > 0.7 and is_yang) or           # 大实体阳线
+                                                    (is_yang and last_close > last_high * 0.98)  # 收盘接近最高价
+                                                )
+                                                
+                                                if t1_favorable:
+                                                    filtered_stats["T+1友好形态"] += 1
+                                                    t1_quality_stocks.append(ts_code)
+                                            
+                                            if (is_not_overbought or (recent_pullback and pct_5d < 20)):
+                                                not_overbought_stocks.append(ts_code)
+                                                
+                                            if len(not_overbought_stocks) <= 20:
+                                                logger.debug(f"{ts_code}: 3d={pct_3d:.1f}%, 5d={pct_5d:.1f}%, "
+                                                             f"10d={pct_10d:.1f}%, 20d={pct_20d:.1f}%, "
+                                                             f"max_single={max_single_day:.1f}%, vol_pass={vol_pass}, "
+                                                             f"pullback={recent_pullback}, selected={ts_code in not_overbought_stocks}")
 
                                     except Exception as e:
                                         logger.warning(f"处理{ts_code}时出错: {e}")
@@ -2202,6 +2311,25 @@ class StockAnalyzer:
                             if not stock_row.empty:
                                 if stock_row.iloc[0]['pct_chg'] <= 5:
                                     not_overbought_stocks.append(ts_code)
+
+                # 记录涨停股票情况
+                if limit_up_stocks:
+                    logger.info(f"🚀 找到{len(limit_up_stocks)}支近期有涨停的股票")
+                    for ts_code, count, latest_date in limit_up_stocks[:10]:  # 只显示前10支
+                        logger.info(f"  - {ts_code}: {count}次涨停, 最近涨停: {latest_date}")
+                else:
+                    logger.info("⚠️ 未找到符合条件的涨停股票")
+                
+                # 输出T+1筛选统计
+                logger.info(f"📊 穿线型T+1筛选统计: {filtered_stats}")
+                
+                # 优先考虑T+1友好形态的股票
+                if t1_quality_stocks:
+                    logger.info(f"🌟 找到{len(t1_quality_stocks)}支T+1友好形态股票")
+                    # 确保这些股票被保留
+                    for ts_code in t1_quality_stocks:
+                        if ts_code not in not_overbought_stocks:
+                            not_overbought_stocks.append(ts_code)
 
                 # 过滤出涨幅适中的股票
                 filtered = filtered.copy()
@@ -2217,7 +2345,8 @@ class StockAnalyzer:
                         (df['pe_ttm'].between(cfg['pe'][0], cfg['pe'][1])) &
                         (df['pb'].between(cfg['pb'][0], cfg['pb'][1])) &
                         (df['roe'] >= cfg['roe']) &
-                        (df['pct_chg'] <= 6)
+                        (df['pct_chg'] <= 6) &
+                        (df['pct_chg'] >= -5)  # 防止选入大幅下跌股
                     ]
                     logger.info(f"📈 放宽条件后：{len(filtered)} 支")
 
@@ -2318,7 +2447,7 @@ class StockAnalyzer:
 
             df['vol_ratio'] = vol / vol.rolling(20).mean()
 
-            # === MACD指标计算 ===
+            # === MACD指标 ===
             ema12 = close.ewm(span=12, adjust=False).mean()
             ema26 = close.ewm(span=26, adjust=False).mean()
             dif = ema12 - ema26
@@ -2340,18 +2469,33 @@ class StockAnalyzer:
             rs = avg_gain / (avg_loss + 1e-6)
             df['rsi'] = 100 - (100 / (1 + rs))
 
-            # === 相对位置计算（短期为主）===
+            # === KDJ指标 ===
+            period = 9
+            low_min = low.rolling(period).min()
+            high_max = high.rolling(period).max()
+            rsv = 100 * ((close - low_min) / (high_max - low_min + 1e-6))
+            df['kdj_k'] = rsv.ewm(alpha=1/3, adjust=False).mean()
+            df['kdj_d'] = df['kdj_k'].ewm(alpha=1/3, adjust=False).mean()
+            df['kdj_j'] = 3 * df['kdj_k'] - 2 * df['kdj_d']
+
+            kdj_golden_cross = (df['kdj_k'].shift(1) < df['kdj_d'].shift(1)) & (df['kdj_k'] > df['kdj_d'])
+            kdj_oversold = df['kdj_j'] < 0
+            kdj_k_up = df['kdj_k'] > df['kdj_k'].shift(1)
+            kdj_d_up = df['kdj_d'] > df['kdj_d'].shift(1)
+            kdj_j_up = df['kdj_j'] > df['kdj_j'].shift(1)
+            kdj_all_up = kdj_k_up & kdj_d_up & kdj_j_up
+            kdj_oversold_reversal = kdj_oversold & kdj_k_up & (df['kdj_k'] > df['kdj_d'])
+
+            # === 相对位置判断 ===
             high_20d = high.rolling(20).max()
             low_20d = low.rolling(20).min()
             position_20d = (close - low_20d) / (high_20d - low_20d + 0.001)
-
-            # 超短线“底部”判断（更宽松）
             is_low_position = position_20d < 0.65
             oversold = df['rsi'] < 55
             below_boll_mid = close < df['boll_mid']
             at_bottom = is_low_position | oversold | below_boll_mid
 
-            # === 一阳穿三线（短线） ===
+            # === 一阳穿三线 ===
             is_yang = close > open_price
             cross_today = (close > df['ma5']) & (close > df['ma10']) & (close > df['ma20'])
             prev_below_ma = (
@@ -2362,33 +2506,102 @@ class StockAnalyzer:
             volume_increase = vol > vol.rolling(5).mean() * 1.05
             yang_cross_three_line = is_yang & cross_today & prev_below_ma & at_bottom & volume_increase
 
+            # === 旭日东升 ===
+            body_size = (close - open_price) / (high - low + 0.001)
+            is_big_yang = is_yang & (body_size > 0.6)
+            prev_high_10d = high.shift(1).rolling(10).max()
+            break_resistance = close > prev_high_10d
+            vol_increase_significant = vol > vol.rolling(5).mean() * 1.8
+            prev_trend = close.pct_change(5).shift(1)
+            has_consolidation = (prev_trend < 0) | (prev_trend < 0.03)
+            rising_sun = is_big_yang & break_resistance & vol_increase_significant & has_consolidation
+
+            # === 涨停回踩 ===
+            was_limit_up = (close.shift(1) / close.shift(2) - 1) > 0.08
+            pullback_today = (low / close.shift(1)) < 0.97
+            recover_intraday = (close / low - 1) > 0.02
+            vol_confirm = vol > vol.shift(1) * 0.7
+            limit_up_pullback = was_limit_up & pullback_today & recover_intraday & vol_confirm
+
+            # === 强势股回踩 ===
+            strong_trend = (close > df['ma5']) & (df['ma5'] > df['ma10']) & (df['ma10'] > df['ma20'])
+            was_above_upper = (close.shift(1) > df['boll_upper'].shift(1)) | (close.shift(2) > df['boll_upper'].shift(2))
+            pullback_to_ma5 = (low <= df['ma5'] * 1.02) & (close > df['ma5'] * 0.98)
+            small_vol_pullback = vol < vol.rolling(5).mean()
+            strong_ma5_pullback = strong_trend & was_above_upper & pullback_to_ma5 & small_vol_pullback
+            
+             # === 高台跳水后企稳反弹 ===
+            big_drop_yesterday = (close.shift(1) / close.shift(2) - 1) < -0.05  # 前一天大跌超过5%
+            gap_down_today = open_price < close.shift(1)  # 今天低开
+            recover_today = close > open_price  # 今天收阳
+            volume_active = vol > vol.shift(1) * 0.8  # 今天量能仍然活跃
+            price_hold = low > low.shift(1) * 0.99  # 今天未创新低或仅微创新低
+            skydiving_rebound = big_drop_yesterday & gap_down_today & recover_today & volume_active & price_hold
+        
+            # === 底部盘整突破形态 ===
+            price_range_tight = close.rolling(5).std() / close.rolling(5).mean() < 0.015  # 5日价格波动小
+            volume_breakout = vol > vol.rolling(5).mean() * 1.5  # 成交量明显放大
+            price_breakout = close > close.rolling(5).max().shift(1)  # 价格突破5日新高
+            consolidation_breakout = price_range_tight.shift(1) & volume_breakout & price_breakout & is_yang
+        
+            # === 量价背离突破 ===
+            price_new_low_recently = close.shift(1) < close.rolling(10).min().shift(2)  # 昨天创10日新低
+            volume_not_new_low = vol.shift(1) > vol.rolling(10).min().shift(2) * 1.5  # 昨天成交量不创新低
+            today_breakout = close > close.shift(1) * 1.02  # 今天突破上涨超过2%
+            today_volume_confirm = vol > vol.shift(1) * 1.2  # 今天成交量进一步放大
+            volume_price_divergence = price_new_low_recently & volume_not_new_low & today_breakout & today_volume_confirm
+
             # === OBV动量 ===
             df['obv'] = (np.sign(close.diff()) * vol).fillna(0).cumsum()
             df['obv_ma'] = df['obv'].rolling(20).mean()
 
-            # === 信号生成 ===
+            # === 短期突破 ===
+            short_term_high = high.rolling(3).max().shift(1)
+            short_term_breakout = (close > short_term_high) & (vol > vol.rolling(3).mean() * 1.3)
+
+            # === 背离 ===
+            price_new_high = close > close.rolling(20).max().shift(1)
+            macd_not_new_high = macd <= macd.rolling(20).max().shift(1)
+            bearish_divergence = price_new_high & macd_not_new_high & (macd > 0)
+            price_new_low = close < close.rolling(20).min().shift(1)
+            macd_not_new_low = macd >= macd.rolling(20).min().shift(1)
+            bullish_divergence = price_new_low & macd_not_new_low & (macd < 0)
+
+            # === 最终信号集成 ===
             result = {
-                # === 趋势型 ===
+                # 趋势型
                 "均线突破（5/20/30日）": (close > df[['ma5', 'ma20', 'ma30']].max(axis=1)),
                 "均线多头排列": (df['ma5'] > df['ma20']) & (df['ma20'] > df['ma30']),
                 "MACD零轴共振": (dif > 0) & (dea > 0) & (dif > dea),
                 "趋势突破确认": (close > high.rolling(5).max()) & (vol > vol.rolling(5).mean() * 1.5),
+                "KDJ同向上涨": kdj_all_up & (df['kdj_j'] < 80),
 
-                # === 动量型 ===
+                # 动量型
                 "量价齐升": (df['vol_ratio'].between(1.5, 3)) & (close > close.shift(3) * 1.05),
                 "主力资金共振": (macd > 0) & (df['vol_ratio'] > 1.8),
                 "OBV动量引擎": (df['obv'] > df['obv_ma']) & (close > close.shift(5) * 1.03),
+                "KDJ金叉": kdj_golden_cross & (df['kdj_j'] < 80),
+                "短期突破": short_term_breakout,
 
-                # === 反转型 ===
+                # 反转型
                 "超跌反弹（RSI+BOLL）": (close < df['boll_lower']) & (df['rsi'] < 30),
                 "底部反转确认": (close < df['boll_lower'] * 0.98) & (vol > vol.rolling(5).mean() * 1.2) & (df['rsi'] < 35),
+                "MACD底背离": bullish_divergence,
+                "KDJ超卖反转": kdj_oversold_reversal,
 
-                # === 风险型 ===
+                # 风险型
                 "趋势破位（MA60+MACD死叉）": (close < df['ma60']) & (dif < dea),
                 "高位滞涨风险": (close > df['boll_upper']) & (df['rsi'] > 70) & (vol < vol.rolling(5).mean() * 0.8),
+                "MACD顶背离": bearish_divergence,
 
-                # === 穿线型 ===
-                "一阳穿三线": yang_cross_three_line
+                # 穿线型
+                "一阳穿三线": yang_cross_three_line,
+                "旭日东升": rising_sun,
+                "涨停回踩": limit_up_pullback,
+                "强势回踩": strong_ma5_pullback,
+                "高台跳水企稳": skydiving_rebound,  
+                "底部盘整突破": consolidation_breakout, 
+                "量价背离突破": volume_price_divergence, 
             }
 
             return result, df
@@ -2467,10 +2680,20 @@ class RecommendationTracker:
 
         stock_data['recommend_date'] = recommend_date or datetime.today().strftime('%Y-%m-%d')
 
+        # 确保所有必要字段都存在，防止后续访问出错
+        required_fields = ['pattern_type', 'operation_advice', 'risk_level']
+        for field in required_fields:
+            if field not in stock_data:
+                stock_data[field] = '未知'
+
         new_record = pd.DataFrame([stock_data])
         self.recommendations = pd.concat([self.recommendations, new_record], ignore_index=True)
         self._save_data()
-        logger.info(f"✅ 已添加推荐: {stock_data['ts_code']} ({stock_data['recommend_date']})")
+        logger.info(
+            f"✅ 已添加推荐: {stock_data['ts_code']} ({stock_data['recommend_date']}) - "
+            f"买点类型: {stock_data.get('pattern_type', '未分类')} - "
+            f"风险等级: {stock_data.get('risk_level', '未知')}"
+        )
         return True
 
     def export_to_watchlist(self):
@@ -2495,7 +2718,18 @@ class RecommendationTracker:
 
     def clear(self):
         self.recommendations = pd.DataFrame()
+    def add_recommendation(self, stock_data: dict, recommend_date: Optional[str] = None):
+        if self.stock_exists(stock_data['ts_code']):
+            logger.info(f"⚠️ {stock_data['ts_code']} 已存在推荐记录")
+            return False
 
+        stock_data['recommend_date'] = recommend_date or datetime.today().strftime('%Y-%m-%d')
+
+        new_record = pd.DataFrame([stock_data])
+        self.recommendations = pd.concat([self.recommendations, new_record], ignore_index=True)
+        self._save_data()
+        logger.info(f"✅ 已添加推荐: {stock_data['ts_code']} ({stock_data['recommend_date']}) - 买点类型: {stock_data.get('pattern_type', '未分类')}")
+        return True
     def _save_data(self):
         self.recommendations.to_pickle(self.data_file)
 
@@ -2526,6 +2760,11 @@ def calculate_position(score: float, pct_change: float = 0.0, risk_warnings: Lis
     volatility_penalty = 0.5 if "高波动" in risk_warnings else 1.0
     if volatility_penalty < 1.0:
         return "❌ 不建议买入"  # 波动过大，直接剔除
+
+    # 涨停警告降低仓位
+    has_limit_up_warning = any("涨停" in warning and "追高风险" in warning for warning in risk_warnings)
+    if has_limit_up_warning:
+        return "⚠️ 追高风险大"
 
     # 📈 根据策略调整仓位分配
     if strategy_mode == "稳健型":
@@ -2635,13 +2874,136 @@ def calculate_position(score: float, pct_change: float = 0.0, risk_warnings: Lis
 
 # ===== 界面相关函数 =====
 def get_tracking_html():
-    html = "<h3>📊 推荐历史记录</h3><ul>"
+    html = "<h3>📊 推荐历史记录</h3>"
     if tracker.recommendations.empty:
         return "<h3>📭 暂无推荐记录</h3>"
+    
+    # 添加CSS样式，定义工具提示效果
+    html += """
+    <style>
+    .tooltip {
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+    }
+    
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      width: 300px;
+      background-color: #555;
+      color: #fff;
+      text-align: left;
+      border-radius: 6px;
+      padding: 10px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -150px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
+    }
+    
+    .risk-high {
+      color: #FF4500;
+      font-weight: bold;
+    }
+    
+    .risk-medium-high {
+      color: #FFA500;
+    }
+    
+    .risk-medium {
+      color: #FFD700;
+    }
+    
+    .risk-medium-low {
+      color: #3CB371;
+    }
+    
+    .risk-low {
+      color: #32CD32;
+    }
+    </style>
+    """
+    
+    html += "<table style='width:100%;border-collapse:collapse'>"
+    html += "<tr style='background-color:#f2f2f2'><th>日期</th><th>代码</th><th>名称</th><th>买点类型</th><th>风险等级</th><th>操作建议</th><th>"
+    
+    for i, row in tracker.recommendations.iterrows():
+        pattern_type = row.get('pattern_type', '未分类')
+        operation_advice = row.get('operation_advice', '暂无建议')
+        risk_level = row.get('risk_level', '未知')
+        
+        # 添加风险等级的颜色标识
+        risk_class = ""
+        risk_icon = ""
+        if risk_level == "高风险":
+            risk_class = "risk-high"
+            risk_icon = "⚠️"
+        elif risk_level == "中高风险":
+            risk_class = "risk-medium-high"
+            risk_icon = "⚡"
+        elif risk_level == "中风险":
+            risk_class = "risk-medium"
+            risk_icon = "📊"
+        elif risk_level == "中低风险":
+            risk_class = "risk-medium-low"
+            risk_icon = "🔷"
+        elif risk_level == "低风险":
+            risk_class = "risk-low"
+            risk_icon = "✅"
+        
+        # 限制操作建议的长度，但保留完整建议作为工具提示
+        display_advice = operation_advice
+        if len(operation_advice) > 60:
+            display_advice = operation_advice[:57] + "..."
+        
+        # 添加唯一的股票标识，用于详情按钮
+        stock_id = f"stock_{row['ts_code'].replace('.', '_')}_{i}"
+        
+        html += f"<tr style='border-bottom:1px solid #ddd'>"
+        html += f"<td style='padding:8px'>{row.get('recommend_date', '未知')}</td>"
+        html += f"<td style='padding:8px'>{row.get('ts_code', '未知')}</td>"
+        html += f"<td style='padding:8px'>{row.get('name', '未知')}</td>"
+        html += f"<td style='padding:8px'>{pattern_type}</td>"
+        html += f"<td style='padding:8px' class='{risk_class}'>{risk_icon} {risk_level}</td>"
+        
+        # 添加工具提示，显示完整建议
+        html += f"""
+        <td style='padding:8px' class='tooltip'>{display_advice}
+          <span class='tooltiptext'>{operation_advice}</span>
+        </td>
+        """
+        
 
-    for _, row in tracker.recommendations.iterrows():
-        html += f"<li>{row['recommend_date']} - {row['name']} ({row['ts_code']})</li>"
-    html += "</ul>"
+        
+        html += "</tr>"
+    
+    html += "</table>"
+    
+    # 添加JavaScript，处理详情显示和隐藏
+    html += """
+    <script>
+    function showDetails(id) {
+        document.getElementById(id).style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function hideDetails(id) {
+        document.getElementById(id).style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+    </script>
+    """
+    
     return html
 
 
@@ -2707,29 +3069,17 @@ def get_type_weight_safe(strategy_type: str, type_weights: Dict[str, float]) -> 
 
 
 def evaluate_yang_cross_strength(df: pd.DataFrame) -> str:
-    """
-    评估一阳穿三线信号的质量，返回评级文本。
-    """
     close = df['close'].iloc[-1]
     open_price = df['open'].iloc[-1]
-    high = df['high'].iloc[-1]
-    low = df['low'].iloc[-1]
     vol = df['volume'].iloc[-1]
     ma5 = df['ma5'].iloc[-1]
     ma10 = df['ma10'].iloc[-1]
     ma20 = df['ma20'].iloc[-1]
 
-    # 实体强度：阳线长度
     body_pct = (close - open_price) / (open_price + 1e-6)
-
-    # 均线发散结构
     trend_order = (ma5 > ma10) and (ma10 > ma20)
-
-   
     recent_high = df['high'].rolling(10).max().iloc[-1]
     space_pct = (recent_high - close) / (close + 1e-6)
-
-    # 成交量放大程度
     vol_mean = df['volume'].rolling(5).mean().iloc[-1]
     vol_ratio = vol / (vol_mean + 1e-6)
 
@@ -2901,6 +3251,150 @@ def evaluate_turnover(ts_code: str, turnover: float, strategy_mode: str) -> Tupl
                 f"相对位置:{relative_position:.2f})")
     
     return final_score, eval_text
+def evaluate_rising_sun_strength(df: pd.DataFrame) -> str:
+    """
+    评估旭日东升信号的质量，返回评级文本。
+    """
+    close = df['close'].iloc[-1]
+    open_price = df['open'].iloc[-1]
+    high = df['high'].iloc[-1]
+    low = df['low'].iloc[-1]
+    vol = df['volume'].iloc[-1]
+    
+    # 阳线实体强度
+    body_pct = (close - open_price) / (open_price + 1e-6)
+    
+    # 突破强度（收盘价超过前期高点的程度）
+    prev_high_10d = df['high'].shift(1).rolling(10).max().iloc[-1]
+    break_strength = (close - prev_high_10d) / (prev_high_10d + 1e-6)
+    
+    # 成交量放大程度
+    vol_mean = df['volume'].rolling(5).mean().iloc[-1]
+    vol_ratio = vol / (vol_mean + 1e-6)
+    
+    # 计算得分
+    score = 0
+    if body_pct > 0.04: score += 1  # 大阳线
+    if break_strength > 0.02: score += 1  # 有效突破
+    if vol_ratio > 2.0: score += 1  # 显著放量
+    if df['close'].pct_change(3).iloc[-1] < 0.08: score += 1  # 前期非过度上涨
+    
+    if score >= 3:
+        return "🔥强势突破"
+    elif score == 2:
+        return "⚠️一般突破"
+    else:
+        return "❌弱势突破"
+def check_recent_limit_up(ts_code: str, days: int = 10) -> Tuple[bool, int, List[str]]:
+    """
+    检查股票最近n天内是否出现过涨停
+    
+    Args:
+        ts_code: 股票代码
+        days: 检查的天数范围
+        
+    Returns:
+        Tuple[bool, int, List[str]]: 
+            - 是否有涨停
+            - 涨停次数
+            - 涨停日期列表
+    """
+    try:
+        end_date = datetime.today().strftime('%Y%m%d')
+        start_date = (datetime.today() - timedelta(days=days)).strftime('%Y%m%d')
+        
+        # 获取股票近期行情
+        df = safe_api_call(
+            pro.daily, 
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            fields='ts_code,trade_date,pct_chg,close,limit_status'
+        )
+        
+        if df.empty:
+            return False, 0, []
+        
+        # 如果接口直接提供limit_status字段
+        if 'limit_status' in df.columns:
+            limit_up_days = df[df['limit_status'] == 'U']['trade_date'].tolist()
+            has_limit_up = len(limit_up_days) > 0
+            return has_limit_up, len(limit_up_days), limit_up_days
+        
+        # 如果没有limit_status字段，则用涨幅判断(9.5%以上视为涨停)
+        limit_up_days = df[df['pct_chg'] >= 9.5]['trade_date'].tolist()
+        has_limit_up = len(limit_up_days) > 0
+        return has_limit_up, len(limit_up_days), limit_up_days
+        
+    except Exception as e:
+        logger.warning(f"检查 {ts_code} 近期涨停数据失败: {str(e)}")
+        return False, 0, []
+
+def evaluate_skydiving_strength(df):
+    """评估高台跳水企稳形态的质量"""
+    close = df["close"]
+    low = df["low"]
+    vol = df["volume"]
+    
+    # 下跌幅度
+    drop_pct = close.shift(1) / close.shift(2) - 1
+    
+    # 反弹幅度
+    rebound_pct = close / low - 1
+    
+    # 成交量变化
+    vol_change = vol / vol.shift(1)
+    
+    # 评价标准
+    if drop_pct.iloc[-1] < -0.07 and rebound_pct.iloc[-1] > 0.04 and vol_change.iloc[-1] > 1.0:
+        return "🔥高质量企稳"
+    elif drop_pct.iloc[-1] < -0.05 and rebound_pct.iloc[-1] > 0.02:
+        return "⚠️一般企稳"
+    else:
+        return "❌弱势企稳"
+
+def evaluate_consolidation_breakout_strength(df):
+    """评估底部盘整突破形态的质量"""
+    close = df["close"]
+    high = df["high"]
+    vol = df["volume"]
+    
+    # 突破幅度
+    breakout_pct = close / close.rolling(5).max().shift(1) - 1
+    
+    # 成交量放大程度
+    vol_expand = vol / vol.rolling(5).mean()
+    
+    # 评价标准
+    if breakout_pct.iloc[-1] > 0.04 and vol_expand.iloc[-1] > 2.0:
+        return "🔥强势突破"
+    elif breakout_pct.iloc[-1] > 0.02 and vol_expand.iloc[-1] > 1.5:
+        return "⚠️中等突破"
+    else:
+        return "❌弱势突破"
+
+def evaluate_volume_price_divergence_strength(df):
+    """评估量价背离突破形态的质量"""
+    close = df["close"]
+    vol = df["volume"]
+    
+    # 突破幅度
+    breakout_pct = close / close.shift(1) - 1
+    
+    # 新低偏离程度
+    price_divergence = close.shift(1) / close.rolling(10).min().shift(2)
+    
+    # 成交量对比
+    vol_divergence = vol.shift(1) / vol.rolling(10).min().shift(2)
+    
+    # 评价标准
+    if breakout_pct.iloc[-1] > 0.03 and price_divergence.iloc[-1] < 1.02 and vol_divergence.iloc[-1] > 2.0:
+        return "🔥显著背离"
+    elif breakout_pct.iloc[-1] > 0.02 and vol_divergence.iloc[-1] > 1.5:
+        return "⚠️一般背离"
+    else:
+        return "❌弱势背离"
+
 
 def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[str, float]],
                    strategies: List[str],
@@ -2923,6 +3417,15 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
         return []
 
     logger.info(f"🚀 分析启动：{len(stock_list)} 支股票 ｜ 模式：{strategy_mode} ｜ 数据日期：{actual_trade_date}")
+    
+    # 获取市场状态信息
+    market_data = _get_market_indicators(datetime.strptime(actual_trade_date, '%Y%m%d') if isinstance(actual_trade_date, str) else actual_trade_date)
+    is_bull_market = False
+    market_status = "未知"
+    if market_data:
+        _, _, _, market_status, _ = market_data
+        is_bull_market = market_status in ["牛市", "极端牛市", "温和牛市"]
+        logger.info(f"📊 当前市场状态: {market_status}, 牛市环境: {is_bull_market}")
     
     # ✅ 板块热度评分系统集成部分
     if isinstance(actual_trade_date, datetime):
@@ -2995,24 +3498,28 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
     type_weights = STRATEGY_TYPE_WEIGHTS.copy()
 
     if strategy_mode == "稳健型":
-        type_weights["趋势型"] *= 1.2
+        type_weights["趋势型"] *= 1.3
         type_weights["动量型"] *= 0.8
         type_weights["反转型"] *= 0.9
         type_weights["市场中性型"] *= 1.2
-        type_weights["风险型"] = max(-2.0, type_weights.get("风险型", -1.2) * 1.4)
+        type_weights["穿线型"] *= 0.3   
+       
     elif strategy_mode == "激进型":
-        type_weights["趋势型"] *= 0.9
-        type_weights["动量型"] *= 1.15
+        type_weights["趋势型"] *= 0.6
+        type_weights["动量型"] *= 1.3
         type_weights["反转型"] *= 1.1
-        type_weights["市场中性型"] *= 0.75
-        type_weights["风险型"] = max(-3.0, type_weights.get("风险型", -1.0) * 0.8)
+        type_weights["市场中性型"] *= 1.0
+        type_weights["穿线型"] *= 0.3  
+       
     elif strategy_mode == "穿线型":
         # 穿线型策略特殊调整
-        type_weights["穿线型"] *= 1.25  
-        type_weights["趋势型"] *= 0.8
-        type_weights["动量型"] *= 0.8
-        type_weights["风险型"] = max(-2.0, type_weights.get("风险型", -1.0) * 0.6)
-
+        type_weights["穿线型"] *= 2.0  
+        type_weights["趋势型"] *= 0.3  
+        type_weights["动量型"] *= 0.3
+        type_weights["反转型"] *= 0.3
+        type_weights["市场中性型"] *= 1.0
+      
+        
     # Step 2: 再根据市场状态动态调整权重
     if IS_BACKTEST and custom_weights:
         logger.info("🎯 使用回测传入的市场扰动权重")
@@ -3070,71 +3577,448 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
             score += financial_score * 1
             score_details['基本面得分'] = financial_score * 1
 
-            # 策略匹配过滤
-            raw_matched = list(set(
-                [s for s in strategies if s in indicators and indicators[s].iloc[-1]] +
-                [s for s in POTENTIAL_SIGNALS if s in indicators and indicators[s].iloc[-1]]
-            ))
+            all_strategies = [s for group in STRATEGY_GROUPS.values() for s in group]
+            matched = [s for s in all_strategies if s in indicators and indicators[s].iloc[-1]]
 
-            # 定义有效策略白名单
-            valid_strategies = list(STRATEGY_WEIGHTS.keys()) + POTENTIAL_SIGNALS
-            matched = [s for s in raw_matched if s in valid_strategies]
+                
 
             if strategy_mode == "穿线型":
-                # 检查是否满足"一阳穿三线"指标
-                if "一阳穿三线" in indicators and indicators["一阳穿三线"].iloc[-1]:
-                    # ✅ 新增：穿线质量判断，提前筛除弱信号
-                    quality = evaluate_yang_cross_strength(df)
-                    if quality == "❌弱穿线":
-                        removal_stats["穿线信号弱"] += 1
-                        logger.info(f"🛑 {ts_code} 被筛除，原因：穿线信号强度不足（弱穿线）")
-                        return None
+                # 检查所有穿线类型指标
+                yang_cross = "一阳穿三线" in indicators and indicators["一阳穿三线"].iloc[-1]
+                rising_sun = "旭日东升" in indicators and indicators["旭日东升"].iloc[-1]
+                limit_pullback = "涨停回踩" in indicators and indicators["涨停回踩"].iloc[-1]
+                strong_pullback = "强势回踩" in indicators and indicators["强势回踩"].iloc[-1]
+                skydiving = "高台跳水企稳" in indicators and indicators["高台跳水企稳"].iloc[-1]
+                consolidation = "底部盘整突破" in indicators and indicators["底部盘整突破"].iloc[-1]
+                vol_price_divergence = "量价背离突破" in indicators and indicators["量价背离突破"].iloc[-1]
+                
+                # 创建形态映射
+                pattern_matched = {
+                    "一阳穿三线": yang_cross,
+                    "旭日东升": rising_sun,
+                    "涨停回踩": limit_pullback,
+                    "强势回踩": strong_pullback,
+                    "高台跳水企稳": skydiving,
+                    "底部盘整突破": consolidation,
+                    "量价背离突破": vol_price_divergence
+                }
+                
+                # 穿线形态优先级配置
+                crossline_priority = {
+                    "涨停回踩": 10,
+                    "旭日东升": 9,
+                    "量价背离突破": 8,
+                    "一阳穿三线": 7,
+                    "强势回踩": 6,
+                    "高台跳水企稳": 5,
+                    "底部盘整突破": 4
+                }
+                
+                # 判断是否有至少一种穿线形态
+                has_cross_pattern = any(pattern_matched.values())
+                
+                # 找出最优先级的穿线形态
+                best_pattern = None
+                best_priority = 0
+                
+                for pattern, is_matched in pattern_matched.items():
+                    if is_matched and crossline_priority.get(pattern, 0) > best_priority:
+                        best_pattern = pattern
+                        best_priority = crossline_priority.get(pattern, 0)
+                
+                # 添加到得分详情中
+                if best_pattern:
+                    score_details['最优穿线形态'] = best_pattern
+                    # 给予最优形态额外加分
+                    score += 3
+                    score_details['最优形态加分'] = 3
+                
+                # 常规穿线信号判断
+                if has_cross_pattern:
+                    # 统计匹配的形态数量和类型
+                    matched_patterns = [pattern for pattern, is_matched in pattern_matched.items() if is_matched]
+                    matched_count = len(matched_patterns)
+                    score_details['匹配形态数量'] = matched_count
+                    score_details['匹配形态列表'] = matched_patterns
+                
+                    # 判断市场环境，为不同形态提供环境加分
+                    is_uptrend = (df['ma5'].iloc[-1] > df['ma20'].iloc[-1]) & (df['ma20'].iloc[-1] > df['ma60'].iloc[-1])
+                    is_downtrend = (df['ma5'].iloc[-1] < df['ma20'].iloc[-1]) & (df['ma20'].iloc[-1] < df['ma60'].iloc[-1])
+                    
+                    if is_uptrend and is_bull_market:
+                        # 上升趋势中优先考虑回踩类形态
+                        if limit_pullback or strong_pullback:
+                            score += 5
+                            score_details['趋势环境加分'] = "上升趋势中的回踩买点 +5"
+                    elif is_downtrend:
+                        # 下跌趋势中优先考虑反转类形态
+                        if skydiving or vol_price_divergence:
+                            score += 3
+                            score_details['趋势环境加分'] = "下跌趋势中的反转买点 +3"
+                    else:
+                        # 震荡趋势中优先考虑突破类形态
+                        if yang_cross or rising_sun or consolidation:
+                            score += 3
+                            score_details['趋势环境加分'] = "震荡趋势中的突破买点 +3"
+                    
+                    # 记录各形态的原始得分，用于后续应用衰减系数
+                    pattern_scores = []
+                    
+                    # 一阳穿三线判断
+                    if yang_cross:
+                        quality = evaluate_yang_cross_strength(df)
+                        if quality == "❌弱穿线":
+                            removal_stats["穿线信号弱"] += 1
+                            logger.info(f"🛑 {ts_code} 被筛除，原因：穿线信号强度不足（弱穿线）")
+                            return None
+                            
+                        if "一阳穿三线" not in matched:
+                            matched.append("一阳穿三线")
+                        score_details['穿线评分'] = quality
+                        
+                        # 记录原始分值
+                        if quality == "🔥高质量穿线":
+                            pattern_score = 5
+                            pattern_scores.append(("一阳穿三线", pattern_score, quality))
+                        elif quality == "⚠️中等穿线":
+                            pattern_score = 3
+                            pattern_scores.append(("一阳穿三线", pattern_score, quality))
 
-                    # 如果满足，强制添加到匹配策略中
-                    if "一阳穿三线" not in matched:
-                        matched.append("一阳穿三线")
-                    # 给予额外加分
-                    score += 30
-                    score_details['穿线型加分'] = 30
-
-                    # 写入评分等级
-                    score_details['穿线评分'] = quality
-                    if quality == "🔥高质量穿线":
-                        score += 15
-                    elif quality == "⚠️中等穿线":
-                        score += 0  # 保留中等，不额外加分
-
+                    # 旭日东升判断
+                    if rising_sun:
+                        quality = evaluate_rising_sun_strength(df)
+                        if quality == "❌弱势突破":
+                            removal_stats["突破信号弱"] += 1
+                            logger.info(f"🛑 {ts_code} 被筛除，原因：旭日东升信号强度不足（弱势突破）")
+                            return None
+                            
+                        if "旭日东升" not in matched:
+                            matched.append("旭日东升")
+                        score_details['突破评分'] = quality
+                        
+                        # 记录原始分值
+                        if quality == "🔥强势突破":
+                            pattern_score = 5
+                            pattern_scores.append(("旭日东升", pattern_score, quality))
+                        elif quality == "⚠️一般突破":
+                            pattern_score = 3
+                            pattern_scores.append(("旭日东升", pattern_score, quality))
+                    
+                    # 高台跳水企稳判断
+                    if skydiving:
+                        quality = evaluate_skydiving_strength(df)
+                        if quality == "❌弱势企稳":
+                            removal_stats["企稳信号弱"] += 1
+                            logger.info(f"🛑 {ts_code} 被筛除，原因：高台跳水企稳信号强度不足（弱势企稳）")
+                            return None
+                            
+                        if "高台跳水企稳" not in matched:
+                            matched.append("高台跳水企稳")
+                        score_details['企稳评分'] = quality
+                        
+                        # 记录原始分值
+                        if quality == "🔥高质量企稳":
+                            pattern_score = 8
+                            pattern_scores.append(("高台跳水企稳", pattern_score, quality))
+                        elif quality == "⚠️一般企稳":
+                            pattern_score = 5
+                            pattern_scores.append(("高台跳水企稳", pattern_score, quality))
+                    
+                    # 底部盘整突破判断
+                    if consolidation:
+                        quality = evaluate_consolidation_breakout_strength(df)
+                        if quality == "❌弱势突破":
+                            removal_stats["突破信号弱"] += 1
+                            logger.info(f"🛑 {ts_code} 被筛除，原因：底部盘整突破信号强度不足（弱势突破）")
+                            return None
+                            
+                        if "底部盘整突破" not in matched:
+                            matched.append("底部盘整突破")
+                        score_details['盘整突破评分'] = quality
+                        
+                        # 记录原始分值
+                        if quality == "🔥强势突破":
+                            pattern_score = 8
+                            pattern_scores.append(("底部盘整突破", pattern_score, quality))
+                        elif quality == "⚠️中等突破":
+                            pattern_score = 5
+                            pattern_scores.append(("底部盘整突破", pattern_score, quality))
+                    
+                    # 量价背离突破判断
+                    if vol_price_divergence:
+                        quality = evaluate_volume_price_divergence_strength(df)
+                        if quality == "❌弱势背离":
+                            removal_stats["背离信号弱"] += 1
+                            logger.info(f"🛑 {ts_code} 被筛除，原因：量价背离突破信号强度不足（弱势背离）")
+                            return None
+                            
+                        if "量价背离突破" not in matched:
+                            matched.append("量价背离突破")
+                        score_details['背离评分'] = quality
+                        
+                        # 记录原始分值
+                        if quality == "🔥显著背离":
+                            pattern_score = 8
+                            pattern_scores.append(("量价背离突破", pattern_score, quality))
+                        elif quality == "⚠️一般背离":
+                            pattern_score = 5
+                            pattern_scores.append(("量价背离突破", pattern_score, quality))
+                    
+                    # 计算并应用多形态衰减系数
+                    if len(pattern_scores) > 0:
+                        # 保存原始形态评分明细
+                        score_details['形态原始评分'] = [(p, s) for p, s, _ in pattern_scores]
+                        
+                        # 按优先级排序
+                        sorted_patterns = sorted(pattern_scores, 
+                                            key=lambda x: crossline_priority.get(x[0], 0), 
+                                            reverse=True)
+                        
+                        # 应用衰减系数计算最终得分
+                        total_pattern_score = 0
+                        decay_details = []
+                        
+                        for i, (pattern_name, pattern_score, quality) in enumerate(sorted_patterns):
+                            # 衰减系数：首个形态100%，第二个70%，第三个50%，第四个及以后30%
+                            if i == 0:
+                                decay = 1.0
+                            elif i == 1:
+                                decay = 0.7
+                            elif i == 2:
+                                decay = 0.5
+                            else:
+                                decay = 0.3
+                            
+                            decayed_score = pattern_score * decay
+                            total_pattern_score += decayed_score
+                            decay_details.append(f"{pattern_name}({quality}): {pattern_score} × {decay:.1f} = {decayed_score:.1f}")
+                        
+                        # 记录衰减详情
+                        original_total = sum(s for _, s, _ in pattern_scores)
+                        score_details['形态原始总分'] = original_total
+                        score_details['形态衰减详情'] = decay_details
+                        score_details['形态衰减后总分'] = total_pattern_score
+                        
+                        # 应用到总分
+                        score += total_pattern_score
+                        logger.info(f"🔶 {ts_code} {name} 匹配{len(pattern_scores)}种形态，原始分{original_total}，衰减后{total_pattern_score:.1f}")
+                    
+                    # 分析K线形态，预测次日表现
+                    close = df["close"].iloc[-1]
+                    open_price = df["open"].iloc[-1]
+                    high = df["high"].iloc[-1]
+                    low = df["low"].iloc[-1]
+                    
+                    body_ratio = abs(close - open_price) / (high - low)
+                    upper_shadow = (high - max(close, open_price)) / (high - low)
+                    lower_shadow = (min(close, open_price) - low) / (high - low)
+                    
+                    # 分析日内走势特征 (根据开高低收模拟日内走势)
+                    is_yang = close > open_price
+                    if upper_shadow > 0.3 and close < (high + low) / 2:
+                        # 上影线长，收盘靠下 - 次日可能高开回落
+                        t1_pattern = "上影长收盘弱"
+                        t1_advice = "次日建议低吸，关注早盘回调"
+                        t1_risk = "中高"
+                    elif lower_shadow > 0.3 and close > (high + low) / 2:
+                        # 下影线长，收盘靠上 - 次日可能低开走高
+                        t1_pattern = "下影长收盘强"
+                        t1_advice = "次日建议开盘买入，耐心持有"
+                        t1_risk = "中低"
+                    elif body_ratio > 0.7 and is_yang:
+                        # 实体大阳线 - 次日可能高开冲高
+                        t1_pattern = "大阳实体强"
+                        t1_advice = "次日建议高抛低吸，注意高开风险"
+                        t1_risk = "中等"
+                    else:
+                        t1_pattern = "常规K线"
+                        t1_advice = "常规操作"
+                        t1_risk = "一般"
+                    
+                    # 添加到交易模式信息中
+                    if 'trading_pattern' not in score_details:
+                        score_details['trading_pattern'] = {}
+                    
+                    score_details['trading_pattern']['t1_pattern'] = t1_pattern
+                    score_details['trading_pattern']['t1_advice'] = t1_advice
+                    score_details['trading_pattern']['t1_risk'] = t1_risk
+                
+                    # 添加近期涨停检查和加分 (对所有穿线型股票都进行检查)
+                    end_date = datetime.strptime(actual_trade_date, '%Y%m%d') if isinstance(actual_trade_date, str) else actual_trade_date
+                    start_date = (end_date - timedelta(days=10)).strftime('%Y%m%d')
+                    
+                    try:
+                        # 获取股票近期行情
+                        recent_df = safe_api_call(
+                            pro.daily, 
+                            ts_code=ts_code,
+                            start_date=start_date,
+                            end_date=end_date.strftime('%Y%m%d') if isinstance(end_date, datetime) else end_date,
+                            fields='ts_code,trade_date,pct_chg'
+                        )
+                        
+                        if not recent_df.empty:
+                            # 使用涨幅判断(9.5%以上视为涨停)
+                            limit_up_days = recent_df[recent_df['pct_chg'] >= 9.5]['trade_date'].tolist()
+                            limit_up_count = len(limit_up_days)
+                            
+                            if limit_up_count > 0:
+                                # 检查是否当天涨停
+                                end_date_str = end_date.strftime('%Y%m%d') if isinstance(end_date, datetime) else end_date
+                                is_today_limit_up = False
+                                
+                                if limit_up_days and max(limit_up_days) == end_date_str:
+                                    is_today_limit_up = True
+                                    days_since = 0
+                                elif limit_up_days:
+                                    latest_limit_up = max(limit_up_days)
+                                    days_since = (datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(latest_limit_up, '%Y%m%d')).days
+                                else:
+                                    days_since = 999
+                                
+                                score_details['最近涨停'] = f"{days_since}天前"
+                                
+                                # 当天涨停直接过滤掉（适合T+1策略）
+                                if is_today_limit_up:
+                                    removal_stats["当日涨停"] += 1
+                                    logger.info(f"🛑 {ts_code} 被筛除，原因：当日已涨停，不适合T+1")
+                                    return None
+                                
+                                # 对于昨日涨停（1天前），特殊处理
+                                if days_since == 1:
+                                    # 添加风险警告
+                                    if 'risk_warnings' not in score_details:
+                                        score_details['risk_warnings'] = []
+                                    score_details['risk_warnings'].append(f"昨日涨停，注意高开回落风险")
+                                    
+                                    # 涨停后第一天得分惩罚
+                                    score_penalty = -20  
+                                    score += score_penalty
+                                    score_details['昨日涨停惩罚'] = score_penalty
+                                    logger.info(f"⚠️ {ts_code} 昨日涨停，评分惩罚: {score_penalty}")
+                                    
+                                # 2-3天前涨停，轻微惩罚
+                                elif 2 <= days_since <= 3:
+                                    if 'risk_warnings' not in score_details:
+                                        score_details['risk_warnings'] = []
+                                    score_details['risk_warnings'].append(f"最近{days_since}天内涨停，波动可能较大")
+                                    
+                                    # 轻微得分惩罚
+                                    score_penalty = -10
+                                    score += score_penalty
+                                    score_details['近期涨停惩罚'] = score_penalty
+                                    logger.info(f"⚠️ {ts_code} {days_since}天前涨停，评分惩罚: {score_penalty}")
+                                # 涨停已过3天，可以给予加分
+                                else:
+                                    # 根据涨停次数给予加分
+                                    if limit_up_count >= 3:
+                                        limit_bonus = 5  
+                                    elif limit_up_count == 2:
+                                        limit_bonus = 3  
+                                    else:
+                                        limit_bonus = 2  
+                                        
+                                    score += limit_bonus
+                                    score_details['涨停加分'] = limit_bonus
+                                    score_details['涨停次数'] = limit_up_count
+                                    logger.info(f"🚀 {ts_code} {name} 近{limit_up_count}次涨停，加分{limit_bonus}")
+                                
+                    except Exception as e:
+                        logger.warning(f"检查 {ts_code} 近期涨停失败: {str(e)}")
+                        
+                    # 检查技术风险信号
+                    risk_signals = [detail for detail in score_details.get('技术面得分细节', []) 
+                                  if '-' in detail.split(':')[1].strip().split(' ')[0]]
+                    
+                    if risk_signals:
+                        # 提取所有负面技术信号
+                        negative_signals = []
+                        total_risk_score = 0
+                        
+                        for signal in risk_signals:
+                            # 解析信号名称和扣分值
+                            signal_parts = signal.split(':')
+                            signal_name = signal_parts[0].strip()
+                            signal_score_str = signal_parts[1].strip().split(' ')[0]
+                            signal_score = float(signal_score_str)
+                            
+                            negative_signals.append(f"{signal_name}({signal_score})")
+                            total_risk_score += abs(signal_score)
+                        
+                        # 将风险信号添加到风险警告中
+                        if 'risk_warnings' not in score_details:
+                            score_details['risk_warnings'] = []
+                        
+                        risk_desc = f"技术风险信号: {', '.join(negative_signals)}"
+                        score_details['risk_warnings'].append(risk_desc)
+                        
+                        # 对于特别严重的风险信号，增加穿线型策略专属的额外惩罚
+                        if total_risk_score >= 20:  # 如果风险扣分总和超过20分
+                            # 对穿线形态得分进行额外惩罚（原始穿线形态得分的15%）
+                            extra_penalty = min(8, total_pattern_score * 0.15)  # 最多不超过8分
+                            score -= extra_penalty
+                            score_details['严重风险额外惩罚'] = -extra_penalty
+                            
+                            # 降低该股票的操作建议置信度
+                            if 'trading_pattern' in score_details and 'confidence' in score_details['trading_pattern']:
+                                original_confidence = score_details['trading_pattern']['confidence']
+                                score_details['trading_pattern']['confidence'] = max(50, original_confidence - 20)
+                                
+                            # 添加更明确的风险提示到操作建议中
+                            if 'trading_pattern' in score_details and 'operation_advice' in score_details['trading_pattern']:
+                                original_advice = score_details['trading_pattern']['operation_advice']
+                                risk_advice = f"{original_advice}。⚠️存在明显技术风险信号，建议降低仓位，设置较紧止损"
+                                score_details['trading_pattern']['operation_advice'] = risk_advice
+                                
+                            # 将风险等级提高
+                            if 'trading_pattern' in score_details and 'risk_level' in score_details['trading_pattern']:
+                                score_details['trading_pattern']['risk_level'] = "高风险"
+                        
+                        # 添加风险信号详情到评分详情中，使其更明显
+                        score_details['技术风险信号'] = negative_signals
+                        score_details['技术风险扣分总和'] = -total_risk_score
+                        
                 elif not matched:
-                    # 如果是穿线型策略模式但不满足一阳穿三线且没有其他匹配策略，则跳过
+                    # 如果是穿线型策略模式但没有匹配到任何形态，则跳过
                     removal_stats["不满足穿线条件"] += 1
                     logger.info(f"🛑 {ts_code} 被筛除，原因：穿线型策略模式下不满足穿线条件")
                     return None
 
+            # 如果没有匹配到任何策略，则跳过
             if not matched:
                 removal_stats["无匹配策略"] += 1
                 logger.info(f"🛑 {ts_code} 被筛除，原因：无匹配策略")
                 return None
 
             # 权重计算及策略得分
-            weights = {s: STRATEGY_WEIGHTS[s] * merged_weights.get(get_strategy_type(s), 1.0) for s in STRATEGY_WEIGHTS}
+            weights = {s: STRATEGY_WEIGHTS.get(s, 10) * merged_weights.get(get_strategy_type(s), 1.0) for s in STRATEGY_WEIGHTS}
             weights.update(custom_weights)
 
-            matched = sorted(matched, key=lambda s: weights.get(s, 0), reverse=True)[:3]
-            matched = [s for s in matched if get_strategy_type(s) != "风险型"]
+            matched = sorted(matched, key=lambda s: weights.get(s, 0), reverse=True)
+
 
             tech_score = 0
             score_details['技术面得分细节'] = []
 
-            for s in matched:
-                # 获取策略的类型并根据动态权重进行加权
-                strategy_type = get_strategy_type(s)
-                strategy_score = weights.get(s, 10) * merged_weights.get(strategy_type, 1.0)
+            type_count = defaultdict(int)  # 每类策略计数器
 
-                tech_score += strategy_score
-                score_details['技术面得分细节'].append(f"{s}: {strategy_score:.1f}")
+            for s in matched:
+                strategy_type = get_strategy_type(s)
+                type_count[strategy_type] += 1
+
+                # 衰减系数：相同策略类型，每多1个，乘以0.9
+                decay_factor = 0.9 ** (type_count[strategy_type] - 1)
+
+                base_score = weights.get(s, 10) * merged_weights.get(strategy_type, 1.0)
+                final_score = base_score * decay_factor
+
+                tech_score += final_score
+                score_details['技术面得分细节'].append(f"{s}: {final_score:.1f} (×{decay_factor:.2f})")
 
             score += tech_score
             score_details['技术面得分'] = tech_score
+            
+
 
             market_neutral_weight = merged_weights.get("市场中性型", 1.0)
             rs_score = MarketNeutralAnalyzer.calculate_relative_strength(ts_code, actual_trade_date)
@@ -3190,23 +4074,26 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
                 removal_stats["接近跌停"] += 1
                 logger.info(f"🛑 {ts_code} 被筛除，原因：接近跌停")
                 return None
-
             turnover = turnover_map.get(ts_code)
             if turnover is None:
                 removal_stats["换手率过低"] += 1
                 logger.info(f"🛑 {ts_code} 被筛除，原因：换手率过低")
                 return None
+            
             # 使用新的换手率评分函数
             turnover_score, turnover_eval = evaluate_turnover(ts_code, turnover, strategy_mode)
             score += turnover_score
             score_details['换手率加分'] = turnover_score
             score_details['换手率评价'] = turnover_eval
+            
             day_volatility = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-2]
             if day_volatility > 0.15:  # 单日波动超15%
                 removal_stats["异常波动"] += 1
                 return None
             
-        
+            # ===== 新增：计算交易模式分析 =====
+            trading_pattern = analyze_trading_pattern(matched, df, score_details, strategy_mode)
+            score_details['trading_pattern'] = trading_pattern
 
             # 最后返回得分
             return (score, ts_code, name, matched, df['close'].pct_change(5).iloc[-1] * 100, df, score_details)
@@ -3223,31 +4110,154 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
             if result:
                 scored_stocks.append(result)
 
+    # 确保所有的移除原因都被计数，避免后续引用不存在的键
+    required_reasons = [
+        "风险预警", "命中风险策略", "数据不足", "无匹配策略",
+        "穿线信号弱", "突破信号弱", "企稳信号弱", "背离信号弱", "不满足穿线条件",
+        "接近跌停", "换手率过低", "异常波动"
+    ]
+    for reason in required_reasons:
+        if reason not in removal_stats:
+            removal_stats[reason] = 0
+
     # 结果统计和去重
     logger.info(f"✅ 分析完成：总{len(stock_list)}支，候选{len(scored_stocks)}支")
     for reason, count in removal_stats.items():
         logger.info(f"⚠️ 被筛除的原因统计：{reason}：{count}支")
 
-    # 根据策略模式调整推荐机制
+    # 先进行初步选择（保持原有逻辑）
+    pre_selected_stocks = []
+    
     if strategy_mode == "穿线型":
-        # 提取满足"一阳穿三线"条件的股票
-        cross_line_stocks = [stock for stock in scored_stocks if "一阳穿三线" in stock[3]]
+        # 提取满足穿线型条件的股票（包含穿线型下的所有指标）
+        cross_line_stocks = [stock for stock in scored_stocks 
+                             if any(s in stock[3] for s in STRATEGY_GROUPS["穿线型"])]
         
         if cross_line_stocks:
-            logger.info(f"🎯 找到满足一阳穿三线的股票：{len(cross_line_stocks)}支")
-            # 修改：显示所有命中的股票，不限制数量，但仍按照得分排序
-            final_stocks = sorted(cross_line_stocks, key=lambda x: x[0], reverse=True)
+            logger.info(f"🎯 找到满足穿线形态的股票：{len(cross_line_stocks)}支")
+            
+            # 为每只股票添加T+1交易适合度评分
+            t1_scored_stocks = []
+            for stock in cross_line_stocks:
+                score, ts_code, name, matched, pct_change, df, score_details = stock
+                
+                # 提取或计算T+1相关指标
+                turnover = turnover_map.get(ts_code, 0)
+                recent_volatility = df['high'].pct_change().rolling(5).std().iloc[-1] * 100  # 最近5日波动率
+                
+                # 计算T+1得分
+                t1_score = 0
+                
+                # 换手率因素 (0-10分)
+                if turnover >= 5.0:
+                    t1_score += 10
+                elif turnover >= 3.0:
+                    t1_score += 7
+                elif turnover >= 1.5:
+                    t1_score += 4
+                
+                # 波动率因素 (0-6分)
+                if 1.5 <= recent_volatility <= 4.0:  # 适中波动率最理想
+                    t1_score += 6
+                elif recent_volatility < 1.0:  # 波动太小
+                    t1_score += 2
+                elif recent_volatility > 6.0:  # 波动太大
+                    t1_score += 1
+                else:
+                    t1_score += 4
+                
+                # 成交量连续性 (0-4分)
+                vol_stability = df['volume'].pct_change().rolling(3).std().iloc[-1]
+                if vol_stability < 0.3:  # 成交量稳定
+                    t1_score += 4
+                elif vol_stability < 0.5:
+                    t1_score += 2
+                
+                # 将T+1得分添加到原始分数中，按照加权分数排序
+                weighted_score = score * 0.7 + t1_score * 3  # T+1因素权重更高
+                
+                t1_scored_stocks.append((weighted_score, score, ts_code, name, matched, pct_change, df, score_details, t1_score))
+            
+            # 根据加权分数排序
+            t1_scored_stocks.sort(key=lambda x: x[0], reverse=True)
+            
+            # 日志输出T+1相关信息
+            for weighted_score, orig_score, ts_code, name, matched, pct_change, df, score_details, t1_score in t1_scored_stocks[:top_n]:
+                logger.info(f"📊 {ts_code} {name} 原始得分: {orig_score:.1f}, T+1特性得分: {t1_score:.1f}, 加权总分: {weighted_score:.1f}")
+            
+            # 将结果转回原格式，但保留T+1排序
+            pre_selected_stocks = [(orig_score, ts_code, name, matched, pct_change, df, score_details) 
+                                  for weighted_score, orig_score, ts_code, name, matched, pct_change, df, score_details, t1_score 
+                                  in t1_scored_stocks[:top_n*2]]
+            
+            # 在牛市环境下，优先选择涨停回踩和强势回踩的股票
+            if is_bull_market:
+                premium_stocks = [stock for stock in pre_selected_stocks 
+                                 if any(s in stock[3] for s in ["涨停回踩", "强势回踩"])]
+                if premium_stocks and len(premium_stocks) >= top_n // 2:
+                    logger.info(f"🔥 牛市环境下，优先选择回踩形态股票：{len(premium_stocks)}支")
+                    # 优先取回踩形态的股票，剩余名额补充其他穿线型
+                    premium_stocks = sorted(premium_stocks, key=lambda x: x[0], reverse=True)
+                    other_stocks = [s for s in pre_selected_stocks if s not in premium_stocks]
+                    other_stocks = sorted(other_stocks, key=lambda x: x[0], reverse=True)
+                    
+                    # 合并结果，保证回踩形态股票优先
+                    pre_selected_stocks = premium_stocks[:top_n//2] + other_stocks[:top_n-len(premium_stocks[:top_n//2])]
+                    pre_selected_stocks = sorted(pre_selected_stocks, key=lambda x: x[0], reverse=True)
         else:
-            logger.warning("⚠️ 未找到满足一阳穿三线条件的股票，将使用普通排序")
-            final_stocks = sorted(scored_stocks, key=lambda x: x[0], reverse=True)[:top_n]
+            logger.warning("⚠️ 未找到满足穿线条件的股票，将使用普通排序")
+            pre_selected_stocks = sorted(scored_stocks, key=lambda x: x[0], reverse=True)[:top_n*2]
     elif strategy_mode == "稳健型":
-        final_stocks = diversify_recommendations(scored_stocks, max_recommend=top_n)
+        pre_selected_stocks = diversify_recommendations(scored_stocks, max_recommend=top_n*2)
     else:
-        final_stocks = sorted(scored_stocks, key=lambda x: x[0], reverse=True)[:top_n]
+        pre_selected_stocks = sorted(scored_stocks, key=lambda x: x[0], reverse=True)[:top_n*2]
 
-    # 去重操作：确保每只股票只出现一次
-    final_stocks = list({stock[1]: stock for stock in final_stocks}.values())
+    seen_codes = set()
+    ordered_pre_selected = []
+    for stock in pre_selected_stocks:
+        if stock[1] not in seen_codes:
+            seen_codes.add(stock[1])
+            ordered_pre_selected.append(stock)
 
+    # 最终选择与排序
+    final_stocks = ordered_pre_selected[:top_n]
+    # 保证最终推荐按评分排序
+    final_stocks = sorted(final_stocks, key=lambda x: x[0], reverse=True)
+    
+    # 输出优化后的风险分布和买点类型统计
+    risk_counts = {}
+    pattern_counts = {}
+    
+    for stock in final_stocks:
+        _, _, _, _, _, _, score_details = stock
+        risk_level = "未知"
+        pattern_type = "未知"
+        
+        if isinstance(score_details, dict) and 'trading_pattern' in score_details:
+            pattern = score_details['trading_pattern']
+            if isinstance(pattern, dict):
+                if 'risk_level' in pattern:
+                    risk_level = pattern['risk_level']
+                if 'pattern_type' in pattern:
+                    pattern_type = pattern['pattern_type']
+                # 检查是否有T+1特定字段
+                if 't1_risk' in pattern:
+                    risk_level = pattern['t1_risk']
+                if 't1_pattern' in pattern:
+                    pattern_type = pattern['t1_pattern']
+        
+        if risk_level not in risk_counts:
+            risk_counts[risk_level] = 0
+        risk_counts[risk_level] += 1
+        
+        if pattern_type not in pattern_counts:
+            pattern_counts[pattern_type] = 0
+        pattern_counts[pattern_type] += 1
+    
+    logger.info(f"🔄 风险分布优化后：{risk_counts}")
+    logger.info(f"🔄 买点类型优化后：{pattern_counts}")
+
+    # 输出详细信息
     for score, ts_code, name, matched, pct_change, df, score_details in final_stocks:
         logger.info(f"🍇 {ts_code} {name} 总分: {score:.1f} | 组成: {score_details}")
 
@@ -3257,23 +4267,56 @@ def analyze_stocks(stock_list_with_turnover: Tuple[List[Tuple[str, str]], Dict[s
         export_stocks = final_stocks
         if strategy_mode == "穿线型" and len(final_stocks) > top_n:
             logger.info(f"🔄 穿线型策略检测到{len(final_stocks)}支股票，但只导出得分最高的{top_n}支")
-            export_stocks = final_stocks[:top_n]
+            # 确保导出的是评分最高的前top_n只    
+            export_stocks = sorted(final_stocks, key=lambda x: x[0], reverse=True)[:top_n]
+        else:
+        # 对所有策略都确保按评分排序
+            export_stocks = sorted(export_stocks, key=lambda x: x[0], reverse=True)
             
         for score, ts_code, name, matched, pct_change, df, score_details in export_stocks:
+            # 提取风险警告，如果存在
+            risk_warnings = score_details.get('risk_warnings', [])
+            # 提取交易模式信息
+            trading_pattern = score_details.get('trading_pattern', {})
+            pattern_type = trading_pattern.get('pattern_type', '')
+            operation_advice = trading_pattern.get('operation_advice', '')
+            risk_level = trading_pattern.get('risk_level', '未知')
+            
+            # 优先使用T+1特定信息（如果有）
+            t1_pattern = trading_pattern.get('t1_pattern', '')
+            t1_advice = trading_pattern.get('t1_advice', '')
+            t1_risk = trading_pattern.get('t1_risk', '')
+            
+            if t1_pattern:
+                pattern_type = t1_pattern
+            if t1_advice:
+                operation_advice = t1_advice
+            if t1_risk:
+                risk_level = t1_risk
+            
             tracker.add_recommendation({
                 'ts_code': ts_code,
                 'name': name,
                 'strategies': matched,
                 'score': score,
                 'price': df['close'].iloc[-1],
-                'position': calculate_position(score, pct_change, [], strategy_mode),  # 添加strategy_mode参数
+                'position': calculate_position(score, pct_change, risk_warnings, strategy_mode),
+                'pattern_type': pattern_type,
+                'operation_advice': operation_advice,
+                'risk_level': risk_level,
                 'is_top': True
             })
         #tracker.export_to_watchlist()
 
+
+    final_stocks = sorted(final_stocks, key=lambda x: x[0], reverse=True)
+    logger.info(f"📊 按评分排序的最终推荐结果：")
+    for rank, (score, ts_code, name, matched, pct_change, df, score_details) in enumerate(final_stocks, 1):
+        logger.info(f"🏆 第{rank}名: {ts_code} {name} 评分: {score:.1f}")
+    
     logger.info(f"📢 最终推荐：{[ts_code for _, ts_code, *_ in final_stocks]}")
     
-    return final_stocks
+    return final_stocks            
 
 
 
@@ -3287,26 +4330,19 @@ def chat_interface(user_input: str, market_type: List[str], max_stocks: int, str
     custom_weights = {s: w for s, w in STRATEGY_WEIGHTS.items() if get_strategy_type(s) != "风险型"}
 
     if strategy_mode == "稳健型":
-        explanation = "📘 【稳健型】：趋势型为主，适度保留动量与反弹，严格规避风险。"
+        explanation = "📘 【稳健型】：趋势型为主，适度保留动量与反弹，规避风险。"
        
     elif strategy_mode == "激进型":
         explanation = "🚀 【激进型】：突出短线动量与量能机会，趋势适当降低，风险策略已隔离。"
         
     elif strategy_mode == "穿线型":
-        explanation = "🌟 【穿线型】：专注于捕捉均线穿越信号，主要寻找一阳穿三线形态，注重突破确认。"
-        # 穿线型模式下，强制添加一阳穿三线策略
-        if "一阳穿三线" not in strategy_items:
-            strategy_items.append("一阳穿三线")
-            custom_weights["一阳穿三线"] = STRATEGY_WEIGHTS.get("一阳穿三线", 45)
+        explanation = "🌟 【穿线型】：专注于捕捉突破信号，包括一阳穿三线和旭日东升形态，同时关注近期有过涨停的强势股。"
         
     elif any(phrase in user_input for phrase in default_trigger_phrases):
         explanation = "🤖 泛化请求：均衡启用策略，已自动剔除风险策略，综合评估机会。"
     else:
         response = DeepSeekAPI.call_deepseek(user_input)
         strategy_items, explanation, custom_weights = DeepSeekAPI.parse_strategies(response)
-        # 再次过滤风险型策略
-        strategy_items = [s for s in strategy_items if get_strategy_type(s) != "风险型"]
-        custom_weights = {s: w for s, w in custom_weights.items() if get_strategy_type(s) != "风险型"}
 
         if not strategy_items:
             error_msg = f"⚠️ 未识别到有效策略\n{explanation}"
@@ -3335,33 +4371,58 @@ def chat_interface(user_input: str, market_type: List[str], max_stocks: int, str
             result_msg = "✅ 推荐股票 (按分数排序):\n"
             
             # 添加针对穿线型策略的特殊提示
-            if strategy_mode == "穿线型" and len(scored_stocks) > 10:
-                result_msg += f"🔍 找到 {len(scored_stocks)} 支满足一阳穿三线条件的股票\n"
+            if strategy_mode == "穿线型":
+                # 统计不同信号类型的股票数量
+                yang_cross_count = sum(1 for _, _, _, matched, _, _, _ in scored_stocks if "一阳穿三线" in matched)
+                rising_sun_count = sum(1 for _, _, _, matched, _, _, _ in scored_stocks if "旭日东升" in matched)
+                limit_up_count = sum(1 for _, _, _, _, _, _, details in scored_stocks if isinstance(details, dict) and '涨停次数' in details and details['涨停次数'] > 0)
                 
+                if yang_cross_count > 0 or rising_sun_count > 0:
+                    signal_info = []
+                    if yang_cross_count > 0:
+                        signal_info.append(f"一阳穿三线: {yang_cross_count}支")
+                    if rising_sun_count > 0:
+                        signal_info.append(f"旭日东升: {rising_sun_count}支")
+                    if limit_up_count > 0:
+                        signal_info.append(f"近期涨停: {limit_up_count}支")
+                    
+                    result_msg += f"🔍 穿线型策略发现 {len(scored_stocks)} 支符合条件的股票 ({', '.join(signal_info)})，显示得分最高的{len(scored_stocks)}支\n"
+            
+            # 保持原始格式的表头
             result_msg += "排名 | 代码 | 名称 | 得分 | 5日涨幅 | 仓位 | 匹配策略 | 风险提示\n"
             result_msg += "-" * 100 + "\n"
             
             # 如果是穿线型策略且结果过多，考虑分页显示或限制结果行数避免UI显示问题
             max_display = len(scored_stocks)
-            if strategy_mode == "穿线型" and max_display > 50:
+            if max_display > 50:
                 max_display = 50  # UI显示限制，最多显示50行
             
-            # ========== 关键修改开始：UI显示过滤 ==========
-            valid_strategies = list(STRATEGY_WEIGHTS.keys()) + POTENTIAL_SIGNALS  # 有效策略列表
+            # ========== 保持原始格式的结果输出 ==========
+            valid_strategies = list(STRATEGY_WEIGHTS.keys()) 
             for i, (score, ts_code, name, matched, pct_change, _, score_details) in enumerate(scored_stocks[:max_display], 1):
                 # 清洗策略列表
                 clean_matched = [s for s in matched if s in valid_strategies]
 
-                # 如果包含“一阳穿三线”，在其后添加评分标签
+                # 如果包含"一阳穿三线"，在其后添加评分标签
                 if "一阳穿三线" in clean_matched and isinstance(score_details, dict):
                     quality = score_details.get("穿线评分", "")
                     if quality:
                         index = clean_matched.index("一阳穿三线")
                         clean_matched[index] = f"一阳穿三线（{quality}）"
+                
+                # 如果包含"旭日东升"，在其后添加评分标签
+                if "旭日东升" in clean_matched and isinstance(score_details, dict):
+                    quality = score_details.get("突破评分", "")
+                    if quality:
+                        index = clean_matched.index("旭日东升")
+                        clean_matched[index] = f"旭日东升（{quality}）"
 
-                # 提取买点提示
-                buy_signals = [s for s in clean_matched if s in KEY_BUY_SIGNALS]
-                buy_info = "🔥买点:" + ",".join(buy_signals) if buy_signals else ""
+                # 添加涨停信息显示
+                limit_up_info = ""
+                if isinstance(score_details, dict) and '涨停次数' in score_details and score_details['涨停次数'] > 0:
+                    limit_up_info = f"⚡{score_details['涨停次数']}次涨停"
+                    if '最近涨停' in score_details:
+                        limit_up_info += f"({score_details['最近涨停']})"
 
                 # 提取风险提示
                 risk_warnings = []
@@ -3369,20 +4430,23 @@ def chat_interface(user_input: str, market_type: List[str], max_stocks: int, str
                     risk_warnings = score_details['risk_warnings']
                 risk_info = " | ".join(risk_warnings) if risk_warnings else "无"
 
+                # 计算仓位
                 position = calculate_position(score, pct_change, risk_warnings, strategy_mode)
 
-                # 输出最终结果行
+                # 输出结果行，保持原始格式
+                strategy_display = f"{', '.join(clean_matched[:3])}"
+                if limit_up_info:
+                    strategy_display += f" {limit_up_info}"
+                
                 result_msg += (
                     f"{i:2d}. {ts_code.split('.')[0]} {name[:10]} | "
                     f"📊{int(score)} | "
                     f"📈{pct_change:.1f}% | "
                     f"⚖️{position} | "
-                    f"{buy_info} {', '.join(clean_matched[:3])} | "
+                    f"{strategy_display} | "
                     f"{risk_info}\n"
                 )
 
-            # ========== 关键修改结束 ==========
-            
             # 如果有更多结果未显示，添加提示
             if len(scored_stocks) > max_display:
                 result_msg += f"\n... 还有 {len(scored_stocks) - max_display} 支满足条件的股票未显示 (总共 {len(scored_stocks)} 支) ..."
@@ -3396,7 +4460,627 @@ def chat_interface(user_input: str, market_type: List[str], max_stocks: int, str
     return history, history
 
 
+def analyze_trading_pattern(matched_strategies, technical_data, score_details, strategy_mode):
+    """
+    根据匹配的策略和技术指标分析买点类型和操作建议，适应多策略命中情况
+    
+    参数:
+    matched_strategies: 匹配的策略列表
+    technical_data: 股票的技术指标数据（DataFrame）
+    score_details: 得分详情
+    strategy_mode: 策略模式（稳健型、激进型、穿线型）
+    
+    返回:
+    dict: 包含买点类型和操作建议的字典
+    """
+    # 初始化结果
+    result = {
+        "pattern_type": "",  # 买点类型
+        "operation_advice": "",  # 操作建议
+        "stop_loss": 0,      # 止损位
+        "risk_level": "",    # 风险等级
+        "confidence": 0,     # 信心指数（0-100）
+    }
+    
+    # 转换策略列表到集合，方便检查
+    strategies = set(matched_strategies)
+    
+    # 提取最近的价格和指标数据
+    if 'close' in technical_data.columns:
+        close = technical_data['close'].iloc[-1]
+        open_price = technical_data['open'].iloc[-1] if 'open' in technical_data.columns else close * 0.99
+        high = technical_data['high'].iloc[-1] if 'high' in technical_data.columns else close * 1.01
+        low = technical_data['low'].iloc[-1] if 'low' in technical_data.columns else close * 0.99
+        
+        # 计算波动率 - 用于风险评估
+        volatility = technical_data['close'].pct_change().std() * 100 if len(technical_data) > 5 else 2.0
+        
+        # 获取均线数据
+        ma5 = technical_data['ma5'].iloc[-1] if 'ma5' in technical_data.columns else None
+        ma10 = technical_data['ma10'].iloc[-1] if 'ma10' in technical_data.columns else None
+        ma20 = technical_data['ma20'].iloc[-1] if 'ma20' in technical_data.columns else None
+        ma30 = technical_data['ma30'].iloc[-1] if 'ma30' in technical_data.columns else None
+    else:
+        # 如果没有基本数据，使用默认值
+        close = 100
+        open_price = 99
+        high = 101
+        low = 98
+        volatility = 2.0
+        ma5 = ma10 = ma20 = ma30 = None
+    
+    # 从score_details中获取更丰富的信息
+    risk_warnings = []
+    if isinstance(score_details, dict) and 'risk_warnings' in score_details:
+        risk_warnings = score_details['risk_warnings']
+    
+    # 检查是否有涨停信息
+    has_limit_up = False
+    recent_limit_up = False
+    limit_up_days_ago = 999
+    
+    if isinstance(score_details, dict):
+        if '涨停加分' in score_details and score_details['涨停加分'] > 0:
+            has_limit_up = True
+        if '最近涨停' in score_details and '天前' in score_details['最近涨停']:
+            try:
+                days_text = score_details['最近涨停']
+                limit_up_days_ago = int(days_text.split('天前')[0])
+                if limit_up_days_ago <= 3:  # 3天内有涨停
+                    recent_limit_up = True
+            except:
+                pass
+    
+    # === 分析匹配策略的组合，确定主导买点类型 ===
+    
+    # 获取技术面得分详情，查看哪些策略得分最高
+    top_strategies = []
+    if isinstance(score_details, dict) and '技术面得分细节' in score_details:
+        # 尝试从得分细节中提取最重要的策略
+        strategy_scores = []
+        
+        for strategy_score in score_details['技术面得分细节']:
+            try:
+                # 解析格式如 "策略名: 分数 (×权重)"
+                parts = strategy_score.split(':')
+                if len(parts) >= 2:
+                    strategy_name = parts[0].strip()
+                    score_part = parts[1].strip().split('(')[0].strip()
+                    score_value = float(score_part)
+                    strategy_scores.append((strategy_name, score_value))
+            except:
+                continue
+        
+        # 按得分排序并获取前3个策略
+        strategy_scores.sort(key=lambda x: x[1], reverse=True)
+        top_strategies = [s[0] for s in strategy_scores[:3]]
+    
+    # 如果没有从得分细节获取到数据，就使用匹配的策略
+    if not top_strategies:
+        top_strategies = list(strategies)[:3] if strategies else []
+    
+    # 更新策略分类以匹配最新的STRATEGY_GROUPS
+    trend_strategies = ["均线多头排列", "趋势突破确认", "均线突破（5/20/30日）", "MACD零轴共振", "KDJ同向上涨"]
+    momentum_strategies = ["量价齐升", "主力资金共振", "OBV动量引擎", "KDJ金叉", "短期突破"]
+    reversal_strategies = ["超跌反弹（RSI+BOLL）", "底部反转确认", "MACD底背离", "KDJ超卖反转"]
+    crossline_strategies = ["一阳穿三线", "旭日东升", "涨停回踩", "强势回踩"]
+    risk_strategies = ["MACD顶背离", "趋势破位（MA60+MACD死叉）", "高位滞涨风险"]
+    
+    # 统计各类策略的数量（使用所有匹配的策略，不仅仅是top3）
+    trend_count = sum(1 for s in strategies if s in trend_strategies)
+    momentum_count = sum(1 for s in strategies if s in momentum_strategies)
+    reversal_count = sum(1 for s in strategies if s in reversal_strategies)
+    crossline_count = sum(1 for s in strategies if s in crossline_strategies)
+    risk_count = sum(1 for s in strategies if s in risk_strategies)
+    
+    # === 检测混合型买点 - 修改为更多样化的买点类型 ===
+    is_mixed_pattern = False
+    mixed_type = ""
+    
+    # 特定策略组合的混合型判断 - 保持原有逻辑
+    if "底部反转确认" in strategies and "均线多头排列" in strategies:
+        is_mixed_pattern = True
+        mixed_type = "反转趋势混合型"
+    elif "超跌反弹（RSI+BOLL）" in strategies and "MACD零轴共振" in strategies:
+        is_mixed_pattern = True
+        mixed_type = "反弹趋势共振型"
+    elif "KDJ超卖反转" in strategies and "趋势突破确认" in strategies:
+        is_mixed_pattern = True
+        mixed_type = "KDJ反转突破型"
+    elif "底部反转确认" in strategies and "一阳穿三线" in strategies:
+        is_mixed_pattern = True
+        mixed_type = "底部穿线复合型"
+    elif "MACD底背离" in strategies and "旭日东升" in strategies:
+        is_mixed_pattern = True
+        mixed_type = "背离旭日破局型"
+    
+    # 通用混合型判断 - 改进为更细分的类型
+    elif reversal_count >= 1 and trend_count >= 2:
+        is_mixed_pattern = True
+        mixed_type = "反转趋势共振型"
+    elif reversal_count >= 1 and momentum_count >= 2:
+        is_mixed_pattern = True
+        mixed_type = "反转动能启动型"
+    # 修改穿线趋势动能全面共振型的判断条件，使其更严格，并分出更多类型
+    elif crossline_count >= 1 and trend_count >= 1 and momentum_count >= 1:
+        # 细分不同的组合类型，避免全部归为一种
+        if crossline_count >= 1 and trend_count >= 2 and momentum_count >= 2:
+            # 要求更多的组合才能判定为全面共振型
+            is_mixed_pattern = True
+            mixed_type = "穿线趋势动能全面共振型"
+        elif "一阳穿三线" in strategies and "MACD零轴共振" in strategies:
+            is_mixed_pattern = True
+            mixed_type = "一阳穿MACD共振型"
+        elif "旭日东升" in strategies and "量价齐升" in strategies:
+            is_mixed_pattern = True
+            mixed_type = "旭日量价启动型"
+        elif "涨停回踩" in strategies and any(s in strategies for s in trend_strategies):
+            is_mixed_pattern = True
+            mixed_type = "涨停回踩趋势确认型"
+        elif "强势回踩" in strategies and any(s in strategies for s in momentum_strategies):
+            is_mixed_pattern = True
+            mixed_type = "强势回踩动能强化型"
+        elif crossline_count >= 1 and trend_count >= 1:
+            is_mixed_pattern = True
+            mixed_type = "穿线趋势配合型"
+        elif crossline_count >= 1 and momentum_count >= 1:
+            is_mixed_pattern = True
+            mixed_type = "穿线动能加速型"
+        else:
+            is_mixed_pattern = True
+            mixed_type = "技术多因子共振型"
+    
+    # === 策略组合评分机制 ===
+    combination_score = 0
+    
+    # 检查是否有强力组合
+    has_trend_momentum = trend_count > 0 and momentum_count > 0  # 趋势+动量组合
+    has_reversal_volume = reversal_count > 0 and "量价齐升" in strategies  # 反转+量能组合
+    has_crossline_trend = crossline_count > 0 and trend_count > 0  # 穿线+趋势组合
+    
+    if has_trend_momentum:
+        combination_score += 10
+    if has_reversal_volume:
+        combination_score += 8
+    if has_crossline_trend:
+        combination_score += 12
+    
+    # === 确定主导策略类型 ===
+    dominant_type = ""
+    max_count = max(trend_count, momentum_count, reversal_count, crossline_count, 0)  # 加0是为了处理所有计数都为0的情况
+    
+    if max_count > 0:
+        if crossline_count == max_count:
+            dominant_type = "穿线"
+        elif trend_count == max_count:
+            dominant_type = "趋势"
+        elif momentum_count == max_count:
+            dominant_type = "动量"
+        elif reversal_count == max_count:
+            dominant_type = "反转"
+    else:
+        dominant_type = "综合"
+    
+    # === 特殊强力组合检测 - 扩展更多特殊组合类型 ===
+    special_combo = ""
+    if "旭日东升" in strategies and "量价齐升" in strategies:
+        special_combo = "旭日东升+量价齐升"
+        combination_score += 15
+    elif "一阳穿三线" in strategies and "MACD零轴共振" in strategies:
+        special_combo = "一阳穿三线+MACD零轴共振"
+        combination_score += 12
+    elif "涨停回踩" in strategies and "均线多头排列" in strategies:
+        special_combo = "涨停回踩+均线多头"
+        combination_score += 10
+    elif "强势回踩" in strategies and "OBV动量引擎" in strategies:
+        special_combo = "强势回踩+OBV动量"
+        combination_score += 10
+    # 新增特殊组合
+    elif "MACD零轴共振" in strategies and "均线多头排列" in strategies:
+        special_combo = "MACD均线趋势组合"
+        combination_score += 10
+    elif "KDJ同向上涨" in strategies and "OBV动量引擎" in strategies:
+        special_combo = "KDJ+OBV双指标确认"
+        combination_score += 8
+    elif "KDJ金叉" in strategies and "短期突破" in strategies:
+        special_combo = "KDJ金叉短线突破"
+        combination_score += 9
+    
+    # 如果是混合型买点，先处理
+    if is_mixed_pattern:
+        result["pattern_type"] = mixed_type
+        result["confidence"] = 85  # 多重确认，信心指数较高
+        
+        if mixed_type == "反转趋势混合型":
+            result["operation_advice"] = "底部反转信号已得到趋势确认，建议分批买入并持有，回踩不破均线可加仓"
+            result["risk_level"] = "中低风险"
+            result["stop_loss"] = ma10 * 0.97 if ma10 else low * 0.97
+        elif mixed_type == "反弹趋势共振型":
+            result["operation_advice"] = "超跌反弹伴随MACD零轴共振，强势信号，可适量买入并设置浮动止盈"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.96
+        elif mixed_type == "KDJ反转突破型":
+            result["operation_advice"] = "KDJ反转配合价格突破，强力买点，建议及时把握，设置前低止损"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = low * 0.97
+        elif mixed_type == "底部穿线复合型":
+            result["operation_advice"] = "底部反转信号与穿线形态共振，强力买点，建议分批买入，严控风险"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = min(open_price, (open_price + close) / 2)
+        elif mixed_type == "背离旭日破局型":
+            result["operation_advice"] = "MACD底背离配合旭日东升突破，强力买点，可思路性建仓，设置较宽止损"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = low * 0.95
+        elif mixed_type == "反转动能启动型":
+            result["operation_advice"] = "底部反转配合动能指标启动，可能是强势行情起点，建议分批跟进"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.97
+        elif mixed_type == "穿线趋势动能全面共振型":
+            result["operation_advice"] = "突破、趋势与动能三重共振，强势买点，可积极建仓，回踩加仓"
+            result["risk_level"] = "中低风险"
+            result["stop_loss"] = ma5 * 0.98 if ma5 else low * 0.98
+            result["confidence"] = 90  # 三重共振，非常高的信心
+        elif mixed_type == "一阳穿MACD共振型":
+            result["operation_advice"] = "一阳穿三线配合MACD零轴共振，趋势确认性强，可立足低点积极布局"
+            result["risk_level"] = "中低风险"
+            result["stop_loss"] = min(open_price, (open_price + close) / 2)
+            result["confidence"] = 82
+        elif mixed_type == "旭日量价启动型":
+            result["operation_advice"] = "旭日东升形态配合量价齐升，强势突破，建议回踩时积极跟进"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = low * 0.97
+            result["confidence"] = 84
+        elif mixed_type == "涨停回踩趋势确认型":
+            result["operation_advice"] = "涨停回踩得到趋势确认，可回踩时适量布局，注意观察量能配合"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma5 * 0.98 if ma5 else low * 0.97
+            result["confidence"] = 80
+        elif mixed_type == "强势回踩动能强化型":
+            result["operation_advice"] = "强势股回踩配合动能指标，资金活跃，适量布局"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.98
+            result["confidence"] = 78
+        elif mixed_type == "穿线趋势配合型":
+            result["operation_advice"] = "穿线信号配合趋势指标，建议择机介入，设置合理止损"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma10 * 0.97 if ma10 else low * 0.97
+            result["confidence"] = 75
+        elif mixed_type == "穿线动能加速型":
+            result["operation_advice"] = "穿线信号配合动能指标，可短线布局，及时获利了结"
+            result["risk_level"] = "中高风险"
+            result["stop_loss"] = low * 0.96
+            result["confidence"] = 72
+        elif mixed_type == "技术多因子共振型":
+            result["operation_advice"] = "多指标联合共振，可审慎跟进，注意设置止损"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma10 * 0.96 if ma10 else low * 0.96
+            result["confidence"] = 75
+        elif "反转趋势共振型" in mixed_type:
+            result["operation_advice"] = "底部反转配合趋势确认，建议回踩支撑位买入，设置5%止损"
+            result["risk_level"] = "中风险"
+            result["stop_loss"] = ma10 * 0.97 if ma10 else low * 0.97
+    
+    # 特殊强力组合处理
+    elif special_combo:
+        if special_combo == "旭日东升+量价齐升":
+            result["pattern_type"] = "强势突破启动型"
+            result["confidence"] = 88
+            result["operation_advice"] = "旭日东升配合量价齐升，强劲上攻信号，建议积极跟进，回踩买入"
+            result["stop_loss"] = low * 0.96
+            result["risk_level"] = "中风险"
+        elif special_combo == "一阳穿三线+MACD零轴共振":
+            result["pattern_type"] = "穿线趋势共振型"
+            result["confidence"] = 85
+            result["operation_advice"] = "一阳穿三线配合MACD零轴共振，趋势确认度高，可立足低点积极进场"
+            result["stop_loss"] = min(open_price, (open_price + close) / 2)
+            result["risk_level"] = "中风险"
+        elif special_combo == "涨停回踩+均线多头":
+            result["pattern_type"] = "涨停回踩确认型"
+            result["confidence"] = 82
+            result["operation_advice"] = "涨停回踩确认均线支撑，可回踩买入，设置前低止损"
+            result["stop_loss"] = ma5 * 0.98 if ma5 else low * 0.97
+            result["risk_level"] = "中风险"
+        elif special_combo == "强势回踩+OBV动量":
+            result["pattern_type"] = "强势回踩动量型"
+            result["confidence"] = 80
+            result["operation_advice"] = "强势股回踩配合OBV动量确认，资金保持活跃，可背靠均线分批买入"
+            result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.97
+            result["risk_level"] = "中风险"
+        # 新增特殊组合处理
+        elif special_combo == "MACD均线趋势组合":
+            result["pattern_type"] = "均线MACD共振型"
+            result["confidence"] = 83
+            result["operation_advice"] = "均线多头配合MACD零轴共振，趋势性强，建议波段操作"
+            result["stop_loss"] = ma10 * 0.97 if ma10 else low * 0.97
+            result["risk_level"] = "中低风险"
+        elif special_combo == "KDJ+OBV双指标确认":
+            result["pattern_type"] = "KDJ-OBV动能型"
+            result["confidence"] = 76
+            result["operation_advice"] = "KDJ同向上涨配合OBV动量确认，近期资金面良好，可分批介入"
+            result["stop_loss"] = ma5 * 0.96 if ma5 else low * 0.96
+            result["risk_level"] = "中风险"
+        elif special_combo == "KDJ金叉短线突破":
+            result["pattern_type"] = "金叉突破型"
+            result["confidence"] = 73
+            result["operation_advice"] = "KDJ金叉叠加短期突破，适合短线操作，注意及时止盈"
+            result["stop_loss"] = low * 0.96
+            result["risk_level"] = "中高风险"
+    
+    # 涨停回踩策略特殊处理
+    elif "涨停回踩" in strategies or recent_limit_up:
+        result["pattern_type"] = "涨停回踩型"
+        result["confidence"] = 70
+        result["operation_advice"] = "涨停次日支撑回踩买点，建议回踩稳定后少量试仓，注意观察量能配合"
+        result["stop_loss"] = low * 0.97
+        result["risk_level"] = "中高风险"
+    
+    # 强势回踩策略特殊处理
+    elif "强势回踩" in strategies:
+        result["pattern_type"] = "强势回踩型"
+        result["confidence"] = 75
+        result["operation_advice"] = "强势股回踩均线支撑，可背靠均线买入，止损设置在均线下方"
+        result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.98
+        result["risk_level"] = "中风险"
+    
+    # 一阳穿三线策略特殊处理
+    elif "一阳穿三线" in strategies:
+        result["pattern_type"] = "突破反转型"
+        
+        # 检查穿线质量
+        if isinstance(score_details, dict) and "穿线评分" in score_details:
+            quality = score_details["穿线评分"]
+            if "高质量" in quality or "强势" in quality:
+                result["confidence"] = 85
+                result["operation_advice"] = "高质量穿线信号，建议次日回踩时分批买入，止损设置在当日阳线实体下方"
+                result["stop_loss"] = min(open_price, (open_price + close) / 2)
+                result["risk_level"] = "中风险"
+            else:
+                result["confidence"] = 65
+                result["operation_advice"] = "建议等待回踩5日线确认后少量买入，注意量能配合"
+                result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.98
+                result["risk_level"] = "中高风险"
+        else:
+            result["confidence"] = 75
+            result["operation_advice"] = "穿三线信号明确，建议次日观察开盘半小时走势，强势突破前高可跟进"
+            result["stop_loss"] = low * 0.97
+            result["risk_level"] = "中风险"
+    
+    # 旭日东升策略特殊处理
+    elif "旭日东升" in strategies:
+        result["pattern_type"] = "突破起势型"
+        
+        # 检查突破质量
+        if isinstance(score_details, dict) and "突破评分" in score_details:
+            quality = score_details["突破评分"]
+            if "强势" in quality:
+                result["confidence"] = 85
+                result["operation_advice"] = "强势突破信号，建议尾盘少量吸筹，次日冲高震荡可加仓，注意主力资金动向"
+                result["stop_loss"] = low * 0.97
+                result["risk_level"] = "中风险"
+            else:
+                result["confidence"] = 70
+                result["operation_advice"] = "建议次日观察确认，若惯性上攻则追入，回踩不破当日低点可分批买入"
+                result["stop_loss"] = low * 0.96
+                result["risk_level"] = "中高风险"
+        else:
+            result["confidence"] = 80
+            result["operation_advice"] = "旭日东升形态突破压力位，建议少量先买，回踩不破5日线可加仓"
+            result["stop_loss"] = ma5 * 0.97 if ma5 else low * 0.96
+            result["risk_level"] = "中风险"
+    
+    # 如果还没有确定买点类型，则根据主导策略类型确定
+    elif not result["pattern_type"]:
+        # 趋势型策略处理
+        if dominant_type == "趋势" or trend_count >= 2:
+            result["pattern_type"] = "趋势确认型"
+            result["confidence"] = 80
+            
+            if "KDJ同向上涨" in strategies:
+                result["operation_advice"] = "KDJ三线同向上行，配合均线多头排列，建议适量买入，设置5%止损"
+                result["confidence"] = 82
+            elif "短期突破" in strategies:
+                result["operation_advice"] = "短期突破后可能继续上攻，建议次日高开不超3%可介入，严控风险"
+                result["confidence"] = 75
+            elif "均线多头排列" in strategies and "MACD零轴共振" in strategies:
+                result["operation_advice"] = "均线多头排列配合MACD零轴共振，强势格局，可分批追入，严格设置止损"
+                result["confidence"] = 85
+            else:
+                result["operation_advice"] = "趋势良好，建议回踩5日线时买入，止损设置在5日线下方"
+            
+            result["stop_loss"] = ma5 * 0.98 if ma5 else close * 0.95
+            result["risk_level"] = "中低风险"
+        
+        # 动量型策略处理
+        elif dominant_type == "动量" or momentum_count >= 2:
+            result["pattern_type"] = "量价共振型"
+            result["confidence"] = 75
+            
+            if "KDJ金叉" in strategies:
+                result["operation_advice"] = "KDJ金叉指标向好，短期动能强，建议分批跟进，设置5%止损"
+            elif "主力资金共振" in strategies:
+                result["operation_advice"] = "主力资金积极介入，可背靠均线适量买入，注意成交量配合"
+                result["confidence"] = 80
+            elif "OBV动量引擎" in strategies and "量价齐升" in strategies:
+                result["operation_advice"] = "量价与OBV共同上升，资金流入明显，短线可适量跟进，随时设好止损"
+                result["confidence"] = 82
+            else:
+                result["operation_advice"] = "量价配合良好，建议次日低开时加仓，回踩不破10日线"
+            
+            result["stop_loss"] = ma10 * 0.98 if ma10 else close * 0.93
+            result["risk_level"] = "中风险"
+        
+        # 反转型策略处理
+        elif dominant_type == "反转" or reversal_count >= 1:
+            result["pattern_type"] = "底部反转型"
+            result["confidence"] = 70
+            
+            if "MACD底背离" in strategies:
+                result["operation_advice"] = "MACD底背离显示可能触底，建议少量试探性买入，严格设置止损"
+                result["confidence"] = 75
+            elif "KDJ超卖反转" in strategies:
+                result["operation_advice"] = "KDJ超卖反转信号，建议分批试探性买入，注重仓位控制"
+                result["confidence"] = 65
+            else:
+                result["operation_advice"] = "可能触底反弹，建议分批小仓位试探性买入，注意止损保护"
+            
+            result["stop_loss"] = low * 0.97
+            result["risk_level"] = "中高风险"
+        
+        # 强力组合策略
+        elif has_trend_momentum and combination_score > 15:
+            result["pattern_type"] = "趋势动能复合型"
+            result["confidence"] = 88
+            result["operation_advice"] = "趋势与动能双重确认，建议次日早盘适量买入，逢回调加仓，设置5%止损"
+            result["stop_loss"] = ma10 * 0.95 if ma10 else close * 0.95
+            result["risk_level"] = "中低风险"
+        
+        # 混合型或其他情况
+        else:
+            result["pattern_type"] = "综合信号型"
+            result["confidence"] = 65 + min(combination_score, 15)  # 最高提升15点信心
+            result["operation_advice"] = "多指标共振，建议次日观察开盘走势，价格站稳均线后少量介入"
+            result["stop_loss"] = ma10 * 0.97 if ma10 else close * 0.94
+            result["risk_level"] = "中风险"
+    
+    # === 根据风险警告调整建议 ===
+    if risk_count > 0:
+        result["confidence"] = max(40, result["confidence"] - 15)
+        result["operation_advice"] = f"{result['operation_advice']}，注意存在技术风险信号，建议降低仓位"
+        result["risk_level"] = "高风险"
+    
+    for warning in risk_warnings:
+        if "涨停" in warning and "追高风险" in warning:
+            result["confidence"] = max(40, result["confidence"] - 10)
+            result["operation_advice"] = "近期涨停，追高风险大，建议等待回调企稳后再考虑进入"
+            result["risk_level"] = "高风险"
+            break
+    
+    # === 根据换手率评价调整建议 ===
+    if isinstance(score_details, dict) and '换手率评价' in score_details:
+        turnover_eval = score_details['换手率评价']
+        
+        if '过高' in turnover_eval:
+            result["confidence"] = max(40, result["confidence"] - 5)
+            result["operation_advice"] += "，换手率过高注意短期风险"
+        elif '理想' in turnover_eval and '高于历史' in turnover_eval:
+            result["confidence"] = min(95, result["confidence"] + 5)
+            if '明显上升' in turnover_eval:
+                result["operation_advice"] += "，换手活跃度强，资金关注度高"
+    
+    # === 根据策略模式调整最终建议 ===
+    if strategy_mode == "穿线型" and not any(s in strategies for s in crossline_strategies):
+        result["operation_advice"] += "，不符合穿线策略核心条件，建议谨慎"
+        result["confidence"] = max(40, result["confidence"] - 10)
+    
+    elif strategy_mode == "稳健型" and result["confidence"] < 70:
+        result["operation_advice"] = f"稳健策略下{result['operation_advice']}，建议降低仓位或观望"
+        result["confidence"] = max(40, result["confidence"] - 5)
+    
+    elif strategy_mode == "激进型" and result["confidence"] > 65:
+        if result["confidence"] >= 80:
+            result["operation_advice"] += "，激进策略可适度提高仓位"
+            result["confidence"] = min(95, result["confidence"] + 5)
+    
+    # === 新增：添加低风险股票识别逻辑 ===
+    # 1. 稳健型策略的低风险识别（偏向趋势型）
+    if strategy_mode == "稳健型":
+        # 有趋势型指标，且无风险警告，且波动率较低，可升级为低风险
+        if (dominant_type == "趋势" or trend_count >= 2) and result["risk_level"] == "中低风险":
+            trend_low_risk_conditions = [
+                # 均线多头排列是低风险趋势信号
+                "均线多头排列" in strategies,
+                # MACD零轴共振也是可靠确认信号
+                "MACD零轴共振" in strategies,
+                # 没有风险警告
+                len(risk_warnings) == 0,
+                # 相对强度好
+                isinstance(score_details, dict) and score_details.get('市场中性得分', 0) > 5,
+                # 波动率较低
+                volatility < 2.0
+            ]
+            
+            # 满足至少3个条件，评为低风险
+            if sum(1 for c in trend_low_risk_conditions if c) >= 3:
+                result["risk_level"] = "低风险"
+                result["operation_advice"] = f"稳健趋势型低风险机会：{result['operation_advice']}"
+                result["confidence"] = min(95, result["confidence"] + 5)
+                
+    # 2. 激进型策略的低风险识别
+    elif strategy_mode == "激进型":
+        # 动量型的低风险条件 - 即使在激进型策略中，某些组合也可以是低风险
+        if (dominant_type == "动量" or momentum_count >= 2) and result["risk_level"] == "中低风险":
+            momentum_low_risk_conditions = [
+                # 主力资金共振但波动率受控
+                "主力资金共振" in strategies and volatility < 2.5,
+                # 量价齐升且价格在均线上方
+                "量价齐升" in strategies and ma20 and technical_data['close'].iloc[-1] > ma20 if 'close' in technical_data.columns and ma20 else False,
+                # 没有风险警告
+                len(risk_warnings) == 0,
+                # 技术确认度高
+                result["confidence"] >= 85
+            ]
+            
+            if sum(1 for c in momentum_low_risk_conditions if c) >= 3:
+                result["risk_level"] = "低风险"
+                result["operation_advice"] = f"激进策略下的控制风险机会：{result['operation_advice']}"
+    
+    # 3. 穿线型策略的低风险识别
+    elif strategy_mode == "穿线型":
+        # 穿线型通常不是低风险，但如果有强有力的确认，也可以降低风险评级
+        if crossline_count >= 1 and trend_count >= 2 and result["risk_level"] == "中低风险":
+            crossline_low_risk_conditions = [
+                # 一阳穿三线且质量高
+                "一阳穿三线" in strategies and isinstance(score_details, dict) and score_details.get("穿线评分", "") == "🔥高质量穿线",
+                # 辅助趋势确认
+                "均线多头排列" in strategies or "MACD零轴共振" in strategies,
+                # 没有风险警告
+                len(risk_warnings) == 0,
+                # 信心指数高
+                result["confidence"] >= 88
+            ]
+            
+            if sum(1 for c in crossline_low_risk_conditions if c) >= 3:
+                result["risk_level"] = "低风险"
+                result["operation_advice"] = f"高确认度穿线低风险机会：{result['operation_advice']}"
+    
+    # 4. 通用低风险情况识别 - 适用于所有策略模式
+    # 某些技术特征组合天然风险较低
+    if all(s in strategies for s in ["均线多头排列", "MACD零轴共振"]) and len(risk_warnings) == 0:
+        if result["confidence"] >= 85 and (result["risk_level"] == "中低风险" or result["risk_level"] == "中风险"):
+            result["risk_level"] = "低风险"
+            result["operation_advice"] = f"技术面稳健性强，{result['operation_advice']}"
+    
+    # 低波动率+良好基本面评分促使低风险
+    if volatility < 1.5 and isinstance(score_details, dict) and score_details.get('基本面得分', 0) > 8:
+        if result["risk_level"] == "中低风险" and len(risk_warnings) == 0:
+            result["risk_level"] = "低风险"
+            result["operation_advice"] = f"基本面评分优异且波动小，{result['operation_advice']}"
+    
+    # 格式化止损位显示，保留两位小数
+    result["stop_loss"] = round(result["stop_loss"], 2)
+    
+    return result
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ===== 个股查询 Tab 更新：添加详细分析 =====
 def query_stock(ts_code: str) -> str:
     stock_info = StockAnalyzer.get_single_stock_info(ts_code)
     if not stock_info:
@@ -3407,7 +5091,9 @@ def query_stock(ts_code: str) -> str:
     signals = stock_info['technical_signals']
     signal_msgs = [f"🔹 {s}: {'✅' if v else '❌'}" for s, v in signals.items() if v]
     
-    return f"""
+
+    
+    result = f"""
 📈 股票信息 [{basic['ts_code']}]
 ----------------------------
 名称：{basic['name']}
@@ -3425,7 +5111,10 @@ def query_stock(ts_code: str) -> str:
 📊 技术信号
 ----------------------------
 {'\n'.join(signal_msgs) if signal_msgs else '⚠️ 未触发任何技术信号'}
+
+
 """
+    return result
 
 # ===== 默认值配置 =====
 DEFAULT_TURNOVER = 8000   # 今日成交额默认值（亿元）
@@ -3619,7 +5308,7 @@ def calculate_market_sentiment() -> Tuple[str, str]:
 # ===== 创建Gradio界面 =====
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
-    # 📈 量化选股工具 (V25.5.16)
+    # 📈 量化选股工具 (V25.5.19)
     **功能**:
     - 使用Tushare获取当日数据（晚上8点左右更新完毕）            
     - 支持自然语言策略输入
